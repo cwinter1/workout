@@ -227,9 +227,49 @@ function getExInfo(name) {
   };
 }
 
-function ytUrl(exName) {
-  return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(exName + ' exercise tutorial form');
-}
+const YT_IDS = {
+  'Cat–Cow':           'a0wyBGg4aWw',
+  "World's Greatest":  'kk8RnOLzngc',
+  'Hip 90/90 Switch':  'HUZimFZJZWU',
+  'Jumping Jacks':     'uLVt6u15L98',
+  'Arm Circles':       'mwDgFY86zck',
+  'High Knees':        'D0GwAezTvtg',
+  'Push-Up':           'Zi6c09DRGxk',
+  'Squat':             'P-yaD24bUE8',
+  'Bent-over Row':     '6TSP1TRMUzs',
+  'Glute Bridge':      'wPM8icPu6H8',
+  'Dead Bug':          'bxn9FBrt4-A',
+  "Child's Pose":      'fzM3uSrr4-g',
+  'Down Dog → Cobra':  'PWLLxEn4Nbs',
+  'Pigeon':            '0_zPqA65Nok',
+  'Box Breath':        'tEmt1Znux58',
+  'Chin Tucks':        'O2kkwT6t3R0',
+  'Thoracic Ext.':     'mPwvMNk6i70',
+  'Doorway Pec':       'qv6el4OhHjA',
+  'Scapular CARs':     'j9fWLr1KxFA',
+  'Wall Slide':        'yOtlRQxwt3g',
+  'March in Place':    'QilgMPG7OaA',
+  'Band Pull-Apart':   'mCDy-WsNKcs',
+  'Y-T-W on Floor':    'jV6TKLnA1EQ',
+  'Wall Angels':       '1UU4VvklQ44',
+  'Bird Dog':          'ee5DVxN_Tfw',
+  'Sphinx':            'F5JVnU-hQ44',
+  'Seated Twist':      '0hs1JY29Ggk',
+  'Legs Up The Wall':  'xmcDj4Bf--0',
+  'Belly Breathing':   'vUXOfpJVJJM',
+  'Neck Rolls':        'ub_ho_zYN6I',
+  'Ankle Circles':     'mzTQGYGI0Ng',
+  'Surya A':           'AGXic1Kx-Qc',
+  'Standing Fold':     'EVVmwPclv1U',
+  'Warrior II':        'Mn6RSIRCV3w',
+  'Triangle':          'upFYlxZHif0',
+  'Tree Pose':         'yVE4XXFFO70',
+  'Chair → Twist':     'dAcPG0lBahg',
+  'Bridge':            'XMHf6FUGSmk',
+  'Happy Baby':        'Ppku7i3ypGM',
+  'Supine Twist':      'ezyMaQEaVaI',
+  'Savasana':          '1VYlOKUdylM',
+};
 
 function phaseSeconds(totalMin) {
   const s = PROGRAM.phaseShare, total = totalMin * 60;
@@ -579,20 +619,33 @@ function renderPreview(root) {
   };
   chips.append(makeChip(`Week ${state.week}`, cur.variant), makeChip('Duration', fmt(cur.seconds)));
 
-  // Watch tutorial link — opens YouTube search for exact exercise
-  const gifBox = el('a', `display:flex;align-items:center;justify-content:space-between;width:100%;padding:18px 20px;box-sizing:border-box;border-radius:8px;background:${T.card};border:1px solid ${T.hairline};text-decoration:none;cursor:pointer;`);
-  gifBox.href = ytUrl(cur.exName);
-  gifBox.target = '_blank';
-  gifBox.rel = 'noopener noreferrer';
-  const ytLeft = el('div', `display:flex;flex-direction:column;gap:4px;`);
-  const ytLabel = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.accent};letter-spacing:2px;text-transform:uppercase;`);
-  ytLabel.textContent = 'Watch tutorial';
-  const ytName = el('div', `font-size:15px;font-family:${T.display};font-weight:600;color:${T.fg};`);
-  ytName.textContent = cur.exName;
-  ytLeft.append(ytLabel, ytName);
-  const ytArrow = el('div', `font-family:${T.mono_ff};font-size:20px;color:${T.accent};flex-shrink:0;margin-left:12px;`);
-  ytArrow.textContent = '>';
-  gifBox.append(ytLeft, ytArrow);
+  // Tutorial embed — thumbnail poster, tap loads YouTube iframe inline
+  const ytId = YT_IDS[cur.exName];
+  const gifBox = el('div', `width:100%;border-radius:8px;overflow:hidden;border:1px solid ${T.hairline};background:#000;`);
+  if (ytId) {
+    const poster = el('div', `position:relative;width:100%;padding-top:56.25%;cursor:pointer;background:#111 url(https://img.youtube.com/vi/${ytId}/hqdefault.jpg) center/cover no-repeat;`);
+    const overlay = el('div', `position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(0,0,0,0.38);`);
+    const playBtn = el('div', `width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.92);display:flex;align-items:center;justify-content:center;`);
+    playBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M7 4.5l13 7-13 7V4.5z" fill="#111"/></svg>`;
+    const playLbl = el('div', `font-family:${T.mono_ff};font-size:10px;color:#fff;letter-spacing:1.5px;text-transform:uppercase;`);
+    playLbl.textContent = 'Tap to watch';
+    overlay.append(playBtn, playLbl);
+    poster.appendChild(overlay);
+    poster.onclick = () => {
+      gifBox.innerHTML = '';
+      const iframe = document.createElement('iframe');
+      iframe.src = `https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1`;
+      iframe.style.cssText = 'width:100%;aspect-ratio:16/9;border:none;display:block;';
+      iframe.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
+      iframe.allowFullscreen = true;
+      gifBox.appendChild(iframe);
+    };
+    gifBox.appendChild(poster);
+  } else {
+    const fb = el('div', `padding:20px;font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:1px;`);
+    fb.textContent = 'No tutorial available';
+    gifBox.appendChild(fb);
+  }
 
   // How-to
   const descBox = el('div', `background:${T.card};border:1px solid ${T.hairline};border-radius:6px;padding:16px;`);
