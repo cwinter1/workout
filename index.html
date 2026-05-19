@@ -365,21 +365,98 @@ function getStreak() {
   return streak;
 }
 
-function getEncouragement(streak, total) {
-  if (total === 1) return "First one done. Now it's real.";
-  if (streak === 2) return "Back again. That's the habit forming.";
-  if (streak === 3) return "Three in a row. Your body is starting to remember this.";
-  if (streak === 5) return "Five straight. You're not trying anymore — you're doing it.";
-  if (streak === 7) return "A full week. This is yours now.";
-  if (streak === 14) return "Two weeks without missing. This is who you are now.";
-  if (total === 12) return "Four weeks. You did the whole thing.";
-  if (total % 3 === 0) return `${total} sessions in the books. You keep showing up.`;
+function pickMessage(streak, week, dayTag, total) {
+  // Milestone streaks — exact matches first
+  if (total === 1)   return "First one done. Now it's real.";
+  if (total === 12)  return "Twelve sessions. You finished the program.";
+  if (streak === 21) return "Twenty-one days. The research says it's a habit by now. The research is right.";
+  if (streak === 14) return "Two weeks without a gap. Most people quit before this.";
+  if (streak === 10) return "Ten days straight. That's not momentum — that's a new baseline.";
+  if (streak === 7)  return "A full week. Most people have already stopped. You haven't.";
+  if (streak === 5)  return "Five in a row. You're not deciding anymore — you're just doing it.";
+  if (streak === 3)  return "Three straight. Your body is starting to expect this.";
+  if (streak === 2)  return "Two in a row. The second one is the one that matters.";
+
+  // Week + day-type combos — a bit of context about what they just did
+  const combo = `${week}-${dayTag}`;
+  const comboMessages = {
+    '1-STRENGTH': "Week one, strength day. The baseline is set.",
+    '1-POSTURE':  "Posture work on day two. The desk undone.",
+    '1-YOGA':     "First yoga session behind you. That one's about patience, not performance.",
+    '2-STRENGTH': "Second week, first strength day. The numbers don't lie yet — but they will.",
+    '2-POSTURE':  "Posture day again. You're reinforcing something that took years to build wrong.",
+    '2-YOGA':     "Week two yoga done. The range of motion is already shifting, even if you can't feel it.",
+    '3-STRENGTH': "Three weeks of strength work. You're past the point where it was a question.",
+    '3-POSTURE':  "Posture work, week three. Your body is relearning what upright feels like.",
+    '3-YOGA':     "Week three yoga. The poses that felt unfamiliar in week one are starting to settle.",
+    '4-STRENGTH': "Final strength day. This is what four weeks of showing up looks like.",
+    '4-POSTURE':  "Last posture session. You've done the quiet work. It compounds.",
+    '4-YOGA':     "Last yoga session of the program. You built something real here.",
+  };
+  if (comboMessages[combo]) return comboMessages[combo];
+
+  // General methodology pool — why this stuff works, without being a coach
   const pool = [
-    "Locked in.", "Consistent is the word.", "Another one behind you.",
-    "That's how it's done.", "No drama. Just done.", "One more session banked.",
-    "Quiet work. Adds up.", "You know how this goes now.",
+    "Mobility work is the tax you pay so strength training doesn't break you.",
+    "The posture session isn't the glamorous one. It's also the one most people skip.",
+    "You don't build fitness in the sessions. You build it in the recovery between them.",
+    "Ten minutes of this a day is worth more than an hour you only do twice a month.",
+    "The body adapts to what you consistently ask of it. You're asking.",
+    "Consistency without intensity beats intensity without consistency. Every time.",
+    "Done. Another session you'll never have to do for the first time again.",
+    "Quiet work. No drama. This is what it looks like.",
+    "The streak is a byproduct. The practice is the thing.",
+    `${total} sessions. You keep showing up.`,
+    "Another one in the books. It adds up whether you feel it today or not.",
+    "Not every session feels good. This one counts the same.",
+    "The gap between wanting to and doing it is exactly this — showing up when you don't have to.",
+    "One more session behind you. That's the whole job.",
   ];
   return pool[total % pool.length];
+}
+
+function captureProgressPhoto(sessionKey) {
+  return new Promise(resolve => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'user';
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) { resolve(null); return; }
+
+      // Thumbnail: 240×240 square crop, stored in session
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = async () => {
+        URL.revokeObjectURL(url);
+        const size = 240;
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const side = Math.min(img.naturalWidth, img.naturalHeight);
+        const sx = (img.naturalWidth - side) / 2;
+        const sy = (img.naturalHeight - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+        const thumb = canvas.toDataURL('image/jpeg', 0.75);
+
+        // Save thumbnail to session record
+        const sessions = loadSessions();
+        const idx = sessions.findIndex(s => s.key === sessionKey);
+        if (idx !== -1) { sessions[idx].photo = thumb; saveSessions(sessions); }
+
+        // Send full image to camera roll via Web Share API
+        if (navigator.share && navigator.canShare?.({ files: [file] })) {
+          try { await navigator.share({ files: [file], title: 'Progress photo' }); } catch {}
+        }
+        resolve(thumb);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+      img.src = url;
+    };
+    input.oncancel = () => resolve(null);
+    input.click();
+  });
 }
 
 async function shareWorkout(streak, total, duration) {
@@ -422,7 +499,7 @@ async function shareWorkout(streak, total, duration) {
   // encouragement
   ctx.fillStyle = '#e8e5dd';
   ctx.font = 'italic 400 34px "Instrument Serif", serif';
-  ctx.fillText(`"${getEncouragement(streak, total)}"`, 80, 770);
+  ctx.fillText(`"${pickMessage(streak, state.week, PROGRAM.days[state.day].tag, total)}"`, 80, 770);
 
   // footer
   ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(80, 860, 920, 1);
@@ -961,7 +1038,7 @@ function finishSession() {
   state.progress[key] = { done: true, at: now };
   saveProgress();
   const sessions = loadSessions();
-  sessions.push({ key, at: now, duration, week: state.week, day: state.day, dayTitle: PROGRAM.days[state.day].title });
+  sessions.push({ key, at: now, duration, week: state.week, day: state.day, dayTitle: PROGRAM.days[state.day].title, dayTag: PROGRAM.days[state.day].tag });
   saveSessions(sessions);
   state.lastDuration = duration;
   state.view = 'done';
@@ -975,7 +1052,9 @@ function renderDone(root) {
   const total = Object.keys(state.progress).length;
   const streak = getStreak();
   const duration = state.lastDuration || SESSION_MIN * 60;
-  const msg = getEncouragement(streak, total);
+  const dayTag = PROGRAM.days[state.day].tag;
+  const sessionKey = `w${state.week}d${state.day}`;
+  const msg = pickMessage(streak, state.week, dayTag, total);
 
   const scroll = el('div', `flex:1;overflow-y:auto;padding:calc(env(safe-area-inset-top,12px)+36px) 22px 0;`);
   const body = el('div', `display:flex;flex-direction:column;gap:24px;`);
@@ -1018,6 +1097,32 @@ function renderDone(root) {
     ['Program',   `${total} of 12 done`],
   ].forEach(([k, v]) => stats.appendChild(renderStat(k, v)));
   body.appendChild(stats);
+
+  // Photo button
+  const photoBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 22px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;`);
+  const photoIcon = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="${T.fg}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="12" height="9" rx="1.5"/><circle cx="7" cy="7.5" r="2.3"/><path d="M4.5 3l1-2h3l1 2"/></svg>`;
+  photoBtn.innerHTML = `${photoIcon} <span>Progress photo</span>`;
+  photoBtn.onclick = async () => {
+    photoBtn.querySelector('span').textContent = 'Opening camera...';
+    photoBtn.disabled = true;
+    const thumb = await captureProgressPhoto(sessionKey);
+    if (thumb) {
+      photoBtn.style.background = T.card;
+      photoBtn.style.border = `1px solid ${T.accent}44`;
+      const img = document.createElement('img');
+      img.src = thumb;
+      img.style.cssText = `width:32px;height:32px;border-radius:4px;object-fit:cover;`;
+      photoBtn.innerHTML = '';
+      photoBtn.append(img);
+      const lbl = document.createElement('span');
+      lbl.textContent = 'Photo saved';
+      photoBtn.append(lbl);
+    } else {
+      photoBtn.querySelector('span').textContent = 'Progress photo';
+      photoBtn.disabled = false;
+    }
+  };
+  body.appendChild(photoBtn);
 
   body.appendChild(el('div', `height:24px;`));
   scroll.appendChild(body);
@@ -1177,6 +1282,29 @@ function renderMeasurements(root) {
     });
     histSection.appendChild(histList);
     body.appendChild(histSection);
+  }
+
+  // photo timeline — sessions that have a progress photo
+  const sessionsWithPhotos = loadSessions().filter(s => s.photo);
+  if (sessionsWithPhotos.length) {
+    const photoSection = el('div', ``);
+    photoSection.appendChild(sectionHeader('Progress photos'));
+    const strip = el('div', `margin-top:10px;display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;`);
+    strip.style.scrollbarWidth = 'none';
+    [...sessionsWithPhotos].reverse().forEach(s => {
+      const cell = el('div', `flex-shrink:0;display:flex;flex-direction:column;gap:4px;align-items:center;`);
+      const img = document.createElement('img');
+      img.src = s.photo;
+      img.style.cssText = `width:72px;height:72px;border-radius:6px;object-fit:cover;border:1px solid ${T.hairline};`;
+      const dateLbl = el('div', `font-family:${T.mono_ff};font-size:9px;color:${T.mono};letter-spacing:1px;text-align:center;`);
+      dateLbl.textContent = new Date(s.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      const tagLbl = el('div', `font-family:${T.mono_ff};font-size:9px;color:${T.accent};letter-spacing:1px;`);
+      tagLbl.textContent = `W${s.week}D${s.day + 1}`;
+      cell.append(img, dateLbl, tagLbl);
+      strip.appendChild(cell);
+    });
+    photoSection.appendChild(strip);
+    body.appendChild(photoSection);
   }
 
   scroll.appendChild(body);
