@@ -227,22 +227,8 @@ function getExInfo(name) {
   };
 }
 
-// GIF cache
-const gifCache = {};
-async function fetchGif(query) {
-  if (gifCache[query]) return gifCache[query];
-  try {
-    const res = await fetch(`https://api.tenor.com/v1/search?q=${encodeURIComponent(query)}&key=LIVDSRZULELA&limit=5&contentfilter=medium&media_filter=minimal`);
-    const data = await res.json();
-    if (data.results?.length) {
-      const hits = data.results;
-      const pick = hits[Math.floor(Math.random() * Math.min(hits.length, 5))];
-      const url = pick.media[0].gif.url;
-      gifCache[query] = url;
-      return url;
-    }
-  } catch {}
-  return null;
+function ytUrl(exName) {
+  return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(exName + ' exercise tutorial form');
 }
 
 function phaseSeconds(totalMin) {
@@ -593,24 +579,20 @@ function renderPreview(root) {
   };
   chips.append(makeChip(`Week ${state.week}`, cur.variant), makeChip('Duration', fmt(cur.seconds)));
 
-  // GIF box — no fixed aspect-ratio; image fills to its natural proportions
-  const gifBox = el('div', `width:100%;min-height:200px;border-radius:8px;background:${T.card};overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;border:1px solid ${T.hairline};`);
-  const gifLoader = el('div', `position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;`);
-  const spin = el('div', `width:28px;height:28px;border:2px solid ${T.hairline};border-top-color:${T.accent};border-radius:50%;animation:spin .7s linear infinite;`);
-  const gifTxt = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:1px;`);
-  gifTxt.textContent = 'Loading demo...';
-  gifLoader.append(spin, gifTxt);
-  gifBox.appendChild(gifLoader);
-  const gifImg = el('img', `max-width:100%;max-height:clamp(200px,42vh,320px);width:auto;height:auto;display:none;`);
-  gifImg.alt = cur.exName;
-  gifImg.onload = () => { gifLoader.style.display = 'none'; gifBox.style.minHeight = '0'; gifImg.style.display = 'block'; };
-  gifImg.onerror = () => {
-    gifLoader.innerHTML = '';
-    const nm = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:1px;`);
-    nm.textContent = 'No demo available';
-    gifLoader.append(nm);
-  };
-  gifBox.appendChild(gifImg);
+  // Watch tutorial link — opens YouTube search for exact exercise
+  const gifBox = el('a', `display:flex;align-items:center;justify-content:space-between;width:100%;padding:18px 20px;box-sizing:border-box;border-radius:8px;background:${T.card};border:1px solid ${T.hairline};text-decoration:none;cursor:pointer;`);
+  gifBox.href = ytUrl(cur.exName);
+  gifBox.target = '_blank';
+  gifBox.rel = 'noopener noreferrer';
+  const ytLeft = el('div', `display:flex;flex-direction:column;gap:4px;`);
+  const ytLabel = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.accent};letter-spacing:2px;text-transform:uppercase;`);
+  ytLabel.textContent = 'Watch tutorial';
+  const ytName = el('div', `font-size:15px;font-family:${T.display};font-weight:600;color:${T.fg};`);
+  ytName.textContent = cur.exName;
+  ytLeft.append(ytLabel, ytName);
+  const ytArrow = el('div', `font-family:${T.mono_ff};font-size:20px;color:${T.accent};flex-shrink:0;margin-left:12px;`);
+  ytArrow.textContent = '>';
+  gifBox.append(ytLeft, ytArrow);
 
   // How-to
   const descBox = el('div', `background:${T.card};border:1px solid ${T.hairline};border-radius:6px;padding:16px;`);
@@ -622,8 +604,8 @@ function renderPreview(root) {
 
   // Intent
   const intentBox = el('div', `display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:${T.pill};border-radius:6px;`);
-  const intentIcon = el('div', `font-size:16px;flex-shrink:0;margin-top:2px;`);
-  intentIcon.textContent = cur.kind === 'meditation' ? '🧘' : '💡';
+  const intentIcon = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.accent};flex-shrink:0;margin-top:2px;letter-spacing:1px;`);
+  intentIcon.textContent = cur.kind === 'meditation' ? 'MED' : 'TIP';
   const intentText = el('div', `font-size:13px;color:${T.sub};line-height:1.5;`);
   intentText.textContent = cur.intent;
   intentBox.append(intentIcon, intentText);
@@ -639,7 +621,6 @@ function renderPreview(root) {
 
   root.append(hdr, phaseBars, body, ctaWrap);
 
-  fetchGif(info.gif).then(url => { if (url) gifImg.src = url; else gifImg.onerror(); });
 }
 
 // ═══════════════════════════════════════════════════════
