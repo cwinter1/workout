@@ -593,17 +593,17 @@ function renderPreview(root) {
   };
   chips.append(makeChip(`Week ${state.week}`, cur.variant), makeChip('Duration', fmt(cur.seconds)));
 
-  // GIF box
-  const gifBox = el('div', `width:100%;aspect-ratio:16/9;border-radius:8px;background:${T.card};overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;border:1px solid ${T.hairline};`);
+  // GIF box — no fixed aspect-ratio; image fills to its natural proportions
+  const gifBox = el('div', `width:100%;min-height:200px;border-radius:8px;background:${T.card};overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;border:1px solid ${T.hairline};`);
   const gifLoader = el('div', `position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;`);
   const spin = el('div', `width:28px;height:28px;border:2px solid ${T.hairline};border-top-color:${T.accent};border-radius:50%;animation:spin .7s linear infinite;`);
   const gifTxt = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:1px;`);
   gifTxt.textContent = 'Loading demo...';
   gifLoader.append(spin, gifTxt);
   gifBox.appendChild(gifLoader);
-  const gifImg = el('img', `width:100%;height:100%;object-fit:cover;display:none;`);
+  const gifImg = el('img', `max-width:100%;max-height:clamp(200px,42vh,320px);width:auto;height:auto;display:none;`);
   gifImg.alt = cur.exName;
-  gifImg.onload = () => { gifLoader.style.display = 'none'; gifImg.style.display = 'block'; };
+  gifImg.onload = () => { gifLoader.style.display = 'none'; gifBox.style.minHeight = '0'; gifImg.style.display = 'block'; };
   gifImg.onerror = () => {
     gifLoader.innerHTML = '';
     const nm = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:1px;`);
