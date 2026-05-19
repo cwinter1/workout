@@ -232,10 +232,12 @@ const gifCache = {};
 async function fetchGif(query) {
   if (gifCache[query]) return gifCache[query];
   try {
-    const res = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q=${encodeURIComponent(query)}&limit=5&rating=g`);
+    const res = await fetch(`https://api.tenor.com/v1/search?q=${encodeURIComponent(query)}&key=LIVDSRZULELA&limit=5&contentfilter=medium&media_filter=minimal`);
     const data = await res.json();
-    if (data.data?.length) {
-      const url = data.data[0].images.fixed_height.url;
+    if (data.results?.length) {
+      const hits = data.results;
+      const pick = hits[Math.floor(Math.random() * Math.min(hits.length, 5))];
+      const url = pick.media[0].gif.url;
       gifCache[query] = url;
       return url;
     }
@@ -604,10 +606,9 @@ function renderPreview(root) {
   gifImg.onload = () => { gifLoader.style.display = 'none'; gifImg.style.display = 'block'; };
   gifImg.onerror = () => {
     gifLoader.innerHTML = '';
-    const em = el('div', `font-size:52px;`); em.textContent = '🏃';
-    const nm = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};margin-top:6px;`);
-    nm.textContent = 'Demo not available';
-    gifLoader.append(em, nm);
+    const nm = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:1px;`);
+    nm.textContent = 'No demo available';
+    gifLoader.append(nm);
   };
   gifBox.appendChild(gifImg);
 
