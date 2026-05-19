@@ -342,6 +342,12 @@ function loadSessions()      { try { return JSON.parse(localStorage.getItem('mf.
 function saveSessions(s)     { try { localStorage.setItem('mf.sessions', JSON.stringify(s)); } catch {} }
 function loadMeasurements()  { try { return JSON.parse(localStorage.getItem('mf.measurements') || '[]'); } catch { return []; } }
 function saveMeasurements(m) { try { localStorage.setItem('mf.measurements', JSON.stringify(m)); } catch {} }
+function loadGarmin()        { try { return JSON.parse(localStorage.getItem('mf.garmin') || '[]'); } catch { return []; } }
+function saveGarmin(g)       { try { localStorage.setItem('mf.garmin', JSON.stringify(g)); } catch {} }
+function dateKey(ts) {
+  const d = ts ? new Date(ts) : new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 
 function getStreak() {
   const sessions = loadSessions();
@@ -577,6 +583,60 @@ function renderHome(root) {
   kickerDiv.textContent = `${day.kicker} · ${SESSION_MIN} min`;
   titleWrap.append(titleDiv, kickerDiv);
 
+  // Garmin sleep card
+  const todayStr = dateKey();
+  const todayGarmin = loadGarmin().find(g => g.type === 'pre' && g.date === todayStr) || {};
+  const sleepCard = el('div', `background:${T.card};border:1px solid ${T.hairline};border-radius:8px;padding:14px 16px;`);
+  const sleepHdr = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;`);
+  sleepHdr.textContent = 'Garmin — last night';
+  const sleepFields = el('div', `display:flex;gap:16px;`);
+
+  const mkSleepField = (label, inp) => {
+    const wrap = el('div', `flex:1;`);
+    const lbl = el('div', `font-family:${T.mono_ff};font-size:9px;color:${T.mono};letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;`);
+    lbl.textContent = label;
+    wrap.append(lbl, inp);
+    return wrap;
+  };
+  const inpStyle = `background:transparent;border:none;border-bottom:1px solid ${T.hairline};outline:none;font-family:${T.display};font-weight:700;font-size:24px;color:${T.fg};width:100%;padding:2px 0;`;
+
+  const scoreInp = el('input', inpStyle);
+  scoreInp.type = 'number'; scoreInp.min = 0; scoreInp.max = 100; scoreInp.placeholder = '76';
+  if (todayGarmin.sleepScore != null) scoreInp.value = todayGarmin.sleepScore;
+
+  const sleepTimeRow = el('div', `display:flex;align-items:baseline;gap:4px;`);
+  const hInp = el('input', inpStyle + 'width:44px;');
+  hInp.type = 'number'; hInp.min = 0; hInp.max = 12; hInp.placeholder = '7';
+  if (todayGarmin.sleepHours != null) hInp.value = todayGarmin.sleepHours;
+  const hLbl = el('span', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};`);
+  hLbl.textContent = 'h';
+  const mInp = el('input', inpStyle + 'width:44px;');
+  mInp.type = 'number'; mInp.min = 0; mInp.max = 59; mInp.placeholder = '30';
+  if (todayGarmin.sleepMins != null) mInp.value = todayGarmin.sleepMins;
+  const mLbl = el('span', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};`);
+  mLbl.textContent = 'm';
+  sleepTimeRow.append(hInp, hLbl, mInp, mLbl);
+
+  const saveSleep = () => {
+    const score = parseFloat(scoreInp.value);
+    const hours = parseInt(hInp.value);
+    const mins  = parseInt(mInp.value);
+    if (isNaN(score) && isNaN(hours) && isNaN(mins)) return;
+    const garmin = loadGarmin().filter(g => !(g.type === 'pre' && g.date === todayStr));
+    const entry = { type: 'pre', date: todayStr, at: Date.now() };
+    if (!isNaN(score)) entry.sleepScore = score;
+    if (!isNaN(hours)) entry.sleepHours = hours;
+    if (!isNaN(mins))  entry.sleepMins  = mins;
+    garmin.push(entry);
+    saveGarmin(garmin);
+  };
+  scoreInp.onchange = saveSleep;
+  hInp.onchange = saveSleep;
+  mInp.onchange = saveSleep;
+
+  sleepFields.append(mkSleepField('Sleep score', scoreInp), mkSleepField('Sleep time', sleepTimeRow));
+  sleepCard.append(sleepHdr, sleepFields);
+
   // BEGIN button
   const beginBtn = el('button', `appearance:none;border:none;background:${T.accent};color:${T.accentT};border-radius:6px;padding:20px 22px;display:flex;align-items:center;justify-content:space-between;font-family:${T.display};font-weight:700;font-size:18px;letter-spacing:0.5px;text-transform:uppercase;width:100%;`);
   const beginL = el('span', `display:flex;align-items:center;gap:12px;`);
@@ -622,7 +682,7 @@ function renderHome(root) {
   measBtn.onclick = () => { state.view = 'measurements'; render(); };
   bottomLinks.append(progBtn, measBtn);
 
-  pad.append(eyebrow, titleWrap, beginBtn, phaseBreak, weekSection, progGrid, bottomLinks, el('div', `height:40px;`));
+  pad.append(eyebrow, titleWrap, sleepCard, beginBtn, phaseBreak, weekSection, progGrid, bottomLinks, el('div', `height:40px;`));
   scroll.appendChild(pad);
   root.appendChild(scroll);
 }
@@ -1101,6 +1161,43 @@ function renderDone(root) {
   ].forEach(([k, v]) => stats.appendChild(renderStat(k, v)));
   body.appendChild(stats);
 
+  // Garmin post-workout card
+  const existingPost = loadGarmin().find(g => g.type === 'post' && g.sessionKey === sessionKey) || {};
+  const garminCard = el('div', `background:${T.card};border:1px solid ${T.hairline};border-radius:8px;padding:14px 16px;`);
+  const garminHdr = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;`);
+  garminHdr.textContent = 'Garmin — post workout';
+  const garminFields = el('div', `display:flex;gap:16px;`);
+
+  const gInpStyle = `background:transparent;border:none;border-bottom:1px solid ${T.hairline};outline:none;font-family:${T.display};font-weight:700;font-size:24px;color:${T.fg};width:100%;padding:2px 0;`;
+  const mkGField = (label, inp) => {
+    const wrap = el('div', `flex:1;`);
+    const lbl = el('div', `font-family:${T.mono_ff};font-size:9px;color:${T.mono};letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;`);
+    lbl.textContent = label;
+    wrap.append(lbl, inp);
+    return wrap;
+  };
+
+  const calInp = el('input', gInpStyle);
+  calInp.type = 'number'; calInp.min = 0; calInp.placeholder = '420';
+  if (existingPost.calories != null) calInp.value = existingPost.calories;
+
+  const activeRow = el('div', `display:flex;align-items:baseline;gap:4px;`);
+  const ahInp = el('input', gInpStyle + 'width:44px;');
+  ahInp.type = 'number'; ahInp.min = 0; ahInp.max = 5; ahInp.placeholder = '0';
+  if (existingPost.activeHours != null) ahInp.value = existingPost.activeHours;
+  const ahLbl = el('span', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};`);
+  ahLbl.textContent = 'h';
+  const amInp = el('input', gInpStyle + 'width:44px;');
+  amInp.type = 'number'; amInp.min = 0; amInp.max = 59; amInp.placeholder = '35';
+  if (existingPost.activeMins != null) amInp.value = existingPost.activeMins;
+  const amLbl = el('span', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};`);
+  amLbl.textContent = 'm';
+  activeRow.append(ahInp, ahLbl, amInp, amLbl);
+
+  garminFields.append(mkGField('Total calories', calInp), mkGField('Active time', activeRow));
+  garminCard.append(garminHdr, garminFields);
+  body.appendChild(garminCard);
+
   // Photo button
   const photoBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 22px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;`);
   const photoIcon = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="${T.fg}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="12" height="9" rx="1.5"/><circle cx="7" cy="7.5" r="2.3"/><path d="M4.5 3l1-2h3l1 2"/></svg>`;
@@ -1146,6 +1243,19 @@ function renderDone(root) {
   const bankBtn = el('button', `flex:2;appearance:none;border:none;background:${T.accent};color:${T.accentT};border-radius:6px;padding:18px 22px;font-family:${T.display};font-weight:700;font-size:16px;text-transform:uppercase;letter-spacing:0.5px;display:flex;align-items:center;justify-content:center;gap:10px;`);
   bankBtn.innerHTML = `${iconCheck(T.accentT)} Bank it`;
   bankBtn.onclick = () => {
+    // save post-workout garmin data
+    const cal = parseFloat(calInp.value);
+    const ah  = parseInt(ahInp.value);
+    const am  = parseInt(amInp.value);
+    if (!isNaN(cal) || !isNaN(ah) || !isNaN(am)) {
+      const garmin = loadGarmin().filter(g => !(g.type === 'post' && g.sessionKey === sessionKey));
+      const entry = { type: 'post', sessionKey, week: state.week, day: state.day, date: dateKey(), at: Date.now() };
+      if (!isNaN(cal)) entry.calories    = cal;
+      if (!isNaN(ah))  entry.activeHours = ah;
+      if (!isNaN(am))  entry.activeMins  = am;
+      garmin.push(entry);
+      saveGarmin(garmin);
+    }
     const ns2 = nextSession();
     state.week = ns2.week; state.day = ns2.day;
     state.view = 'home';
@@ -1266,11 +1376,16 @@ function renderMeasurements(root) {
 
   // history
   if (measurements.length) {
+    const garminAll = loadGarmin();
     const histSection = el('div', ``);
     histSection.appendChild(sectionHeader('History'));
     const histList = el('div', `margin-top:10px;display:flex;flex-direction:column;gap:6px;`);
     [...measurements].reverse().slice(0, 8).forEach(m => {
-      const row = el('div', `background:${T.card};border:1px solid ${T.hairline};border-radius:6px;padding:12px 14px;display:flex;align-items:baseline;justify-content:space-between;`);
+      const dKey = dateKey(new Date(m.date).getTime());
+      const gPre  = garminAll.find(g => g.type === 'pre'  && g.date === dKey) || {};
+      const gPost = garminAll.find(g => g.type === 'post' && g.date === dKey) || {};
+      const row = el('div', `background:${T.card};border:1px solid ${T.hairline};border-radius:6px;padding:12px 14px;`);
+      const top2 = el('div', `display:flex;align-items:baseline;justify-content:space-between;`);
       const dateStr = new Date(m.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
       const d = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:1px;`);
       d.textContent = dateStr;
@@ -1280,7 +1395,21 @@ function renderMeasurements(root) {
       if (m.waist)  parts2.push(`${m.waist}cm`);
       if (m.energy) parts2.push(`E${m.energy}`);
       vals.textContent = parts2.join(' · ');
-      row.append(d, vals);
+      top2.append(d, vals);
+      row.appendChild(top2);
+      // garmin sub-row
+      const garminParts = [];
+      if (gPre.sleepScore != null) garminParts.push(`Sleep ${gPre.sleepScore}`);
+      if (gPre.sleepHours != null || gPre.sleepMins != null) {
+        const h = gPre.sleepHours ?? 0, mn = gPre.sleepMins ?? 0;
+        garminParts.push(`${h}h${mn > 0 ? mn + 'm' : ''}`);
+      }
+      if (gPost.calories != null) garminParts.push(`${gPost.calories} kcal`);
+      if (garminParts.length) {
+        const sub = el('div', `margin-top:5px;font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:1px;`);
+        sub.textContent = garminParts.join(' · ');
+        row.appendChild(sub);
+      }
       histList.appendChild(row);
     });
     histSection.appendChild(histList);
