@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0e1116">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Morning Flow · כריס</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; background: #0e1116; font-family: 'Manrope', system-ui, sans-serif; }
+button { font-family: inherit; cursor: pointer; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes rise { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+</style>
+</head>
+<body>
+<div id="root" style="height:100dvh;display:flex;flex-direction:column;"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// PALETTE & THEME — B · Restore · Dark
+// ═══════════════════════════════════════════════════════
+const T = {
+  bg:      '#0e1116',
+  fg:      '#e8e5dd',
+  sub:     '#8a8478',
+  card:    '#16191e',
+  cardLine:'rgba(255,255,255,0.06)',
+  accent:  '#7aa676',
+  accentT: '#0e1116',
+  hairline:'rgba(255,255,255,0.12)',
+  mono:    'rgba(232,229,221,0.65)',
+  pill:    'rgba(255,255,255,0.06)',
+  display: '"Space Grotesk", system-ui, sans-serif',
+  body:    '"Manrope", system-ui, sans-serif',
+  mono_ff: '"JetBrains Mono", ui-monospace, monospace',
+};
+
+// ═══════════════════════════════════════════════════════
+// UTILITY
+// ═══════════════════════════════════════════════════════
+function el(tag, style) {
+  const e = document.createElement(tag);
+  if (style) e.style.cssText = style;
+  return e;
+}
+function sectionHeader(text) {
+  const h = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:2px;text-transform:uppercase;`);
+  h.textContent = text;
+  return h;
+}
+function renderStat(key, val) {
+  const row = el('div', `display:flex;justify-content:space-between;align-items:center;padding:16px;background:${T.card};border:1px solid ${T.hairline};border-radius:6px;`);
+  const k = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:1.5px;text-transform:uppercase;`);
+  k.textContent = key;
+  const v = el('div', `font-family:${T.display};font-weight:700;font-size:16px;text-transform:uppercase;letter-spacing:0.5px;`);
+  v.textContent = val;
+  row.append(k, v);
+  return row;
+}
+
+// ═══════════════════════════════════════════════════════
+// ICONS
+// ═══════════════════════════════════════════════════════
+function iconPlay(c)  { return `<svg width="14" height="14" viewBox="0 0 14 14" fill="${c}"><polygon points="3,1 13,7 3,13"/></svg>`; }
+function iconPause(c) { return `<svg width="14" height="16" viewBox="0 0 14 16" fill="${c}"><rect x="1" y="1" width="4" height="14" rx="1"/><rect x="9" y="1" width="4" height="14" rx="1"/></svg>`; }
+function iconNext(c)  { return `<svg width="14" height="14" viewBox="0 0 14 14" fill="${c}" stroke="${c}" stroke-width="1"><polygon points="2,1 10,7 2,13"/><rect x="11" y="1" width="2" height="12" rx="1"/></svg>`; }
+function iconCheck(c) { return `<svg width="16" height="16" viewBox="0 0 16 16" stroke="${c}" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,8 6,12 14,4"/></svg>`; }
+function iconClose(c) { return `<svg width="14" height="14" viewBox="0 0 14 14" stroke="${c}" stroke-width="1.5" fill="none" stroke-linecap="round"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>`; }
+function iconArrow(c) { return `<svg width="16" height="16" viewBox="0 0 16 16" stroke="${c}" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,4 10,8 6,12"/></svg>`; }
+
+// ═══════════════════════════════════════════════════════
+// PROGRAM DATA
+// ═══════════════════════════════════════════════════════
+const PROGRAM = {
+  weeks: 4,
+  daysPerWeek: 3,
+  phaseShare: { stretch: 4/35, warmup: 5/35, main: 18/35, yoga: 5/35, meditation: 3/35 },
+  days: [
+    {
+      id: 'd1', title: 'Strength · Mobility', kicker: 'Full body bodyweight', tag: 'STRENGTH',
+      phases: [
+        { id:'stretch', name:'Bend', intent:'Wake up the joints before any load.', exercises:[
+          { name:'Cat–Cow',           variants:['8 rounds · slow','10 rounds + breath hold','12 rounds + thread the needle','14 rounds + thoracic rotation'] },
+          { name:"World's Greatest",  variants:['4 each side · easy','5 each · with reach','6 each · t-spine open','8 each · linger 2s top'] },
+          { name:'Hip 90/90 Switch',  variants:['6 switches · slow','8 switches · lift hand','8 + forward fold','10 + transition lunge'] },
+        ]},
+        { id:'warmup', name:'Warm-up', intent:'Get the heart rate honest.', exercises:[
+          { name:'Jumping Jacks', variants:['30 sec','40 sec','50 sec','60 sec · arm cross'] },
+          { name:'Arm Circles',   variants:['20 fwd / 20 back','30 / 30','40 / 40','40 / 40 + scap pull'] },
+          { name:'High Knees',    variants:['30 sec','40 sec','45 sec','60 sec · arms drive'] },
+        ]},
+        { id:'main', name:'Main Set', intent:'3 rounds. Move with control.', exercises:[
+          { name:'Push-Up',      variants:['Knees · 8 reps','Incline · 10 reps','Standard · 10 reps','Decline · 8 reps · 3s down'] },
+          { name:'Squat',        variants:['Bodyweight · 12','Tempo 3-1-1 · 10','Split Squat · 8 each','Bulgarian · 8 each · pause'] },
+          { name:'Bent-over Row',variants:['Backpack 2kg · 10','Backpack 4kg · 10','Backpack 6kg · 12','Backpack 8kg · 12 · slow'] },
+          { name:'Glute Bridge', variants:['2-leg · 12','2-leg + hold 3s · 10','Single-leg · 8 each','Single-leg + hold 3s · 8 each'] },
+          { name:'Dead Bug',     variants:['6 each side','8 each · tempo','10 each · long lever','10 each · band pull'] },
+        ]},
+        { id:'yoga', name:'Yoga Cool-down', intent:'Tell the body the work is done.', exercises:[
+          { name:"Child's Pose",    variants:['60 sec','75 sec','90 sec · side reach','90 sec · twisted'] },
+          { name:'Down Dog → Cobra',variants:['5 rounds','6 rounds','8 rounds','8 rounds · 3s hold'] },
+          { name:'Pigeon',          variants:['45 sec each','60 sec each','75 sec each · fold','90 sec each · bind'] },
+        ]},
+        { id:'meditation', name:'Meditation', intent:'Box breathing. 3 minutes of clear.', exercises:[
+          { name:'Box Breath', variants:['4·4·4·4','4·4·4·4','5·5·5·5','6·6·6·6'] },
+        ]},
+      ],
+    },
+    {
+      id: 'd2', title: 'Posture · Desk Recovery', kicker: 'Undo the chair', tag: 'POSTURE',
+      phases: [
+        { id:'stretch', name:'Bend', intent:'Open what sitting closed.', exercises:[
+          { name:'Chin Tucks',    variants:['10 reps','12 reps · 2s hold','15 · 3s hold','15 · 5s hold'] },
+          { name:'Thoracic Ext.',variants:['5 reps on roll','8 reps','10 reps · arms long','10 reps + breath'] },
+          { name:'Doorway Pec',  variants:['30 sec each','45 sec each','60 sec each','60 sec + breath'] },
+        ]},
+        { id:'warmup', name:'Warm-up', intent:'Gentle activation.', exercises:[
+          { name:'Scapular CARs', variants:['5 each direction','6 each','8 each · slow','10 each · slow'] },
+          { name:'Wall Slide',    variants:['10 reps','12 reps','15 reps','15 reps · band'] },
+          { name:'March in Place',variants:['40 sec','45 sec','50 sec','60 sec · arms'] },
+        ]},
+        { id:'main', name:'Main Set', intent:'3 rounds. Posture under load.', exercises:[
+          { name:'Band Pull-Apart',variants:['15 reps · light','20 reps · light','15 reps · medium','20 reps · medium'] },
+          { name:'Y-T-W on Floor', variants:['5 each','6 each','8 each','8 each · 2s top'] },
+          { name:'Wall Angels',    variants:['8 slow','10 slow','12 slow','15 slow · pause'] },
+          { name:'Glute Bridge',   variants:['12','15 · 2s hold','Single-leg · 8 each','Single-leg · 10 each'] },
+          { name:'Bird Dog',       variants:['8 each','10 each · 2s hold','10 each + diagonal pulse','12 each + reach'] },
+        ]},
+        { id:'yoga', name:'Yoga Cool-down', intent:'Lengthen the front, settle the spine.', exercises:[
+          { name:'Sphinx',           variants:['60 sec','75 sec','90 sec','90 sec + breath'] },
+          { name:'Seated Twist',     variants:['45 sec each','60 sec each','75 sec each','90 sec each'] },
+          { name:'Legs Up The Wall', variants:['60 sec','90 sec','120 sec','180 sec'] },
+        ]},
+        { id:'meditation', name:'Meditation', intent:'3 min · clear the head.', exercises:[
+          { name:'Box Breath', variants:['4·4·4·4','4·4·4·4','5·5·5·5','6·6·6·6'] },
+        ]},
+      ],
+    },
+    {
+      id: 'd3', title: 'Yoga · Active Recovery', kicker: 'A whole session of bend', tag: 'YOGA',
+      phases: [
+        { id:'stretch', name:'Bend', intent:'Land in the body.', exercises:[
+          { name:'Belly Breathing', variants:['10 breaths','12 breaths','15 breaths','15 breaths · 6s exhale'] },
+          { name:'Neck Rolls',      variants:['5 each way','6 each way','8 each way','10 each way'] },
+          { name:'Ankle Circles',   variants:['10 each way','15 each','20 each','20 each · weighted'] },
+        ]},
+        { id:'warmup', name:'Sun A', intent:'Build heat through the spine.', exercises:[
+          { name:'Surya A',       variants:['3 rounds','4 rounds','5 rounds','6 rounds · linger downdog'] },
+          { name:'Standing Fold', variants:['45 sec','60 sec','75 sec','90 sec · ragdoll sway'] },
+        ]},
+        { id:'main', name:'Standing Flow', intent:'Hold, breathe, transition.', exercises:[
+          { name:'Warrior II',    variants:['30 sec each','40 sec each','50 sec each','60 sec each · arms long'] },
+          { name:'Triangle',      variants:['30 sec each','40 sec each','45 sec each','60 sec each'] },
+          { name:'Tree Pose',     variants:['30 sec each','40 sec each','45 sec · arms up','60 sec · eyes closed'] },
+          { name:'Chair → Twist', variants:['20 sec + 20 each','30 + 30 each','40 + 40 each','45 + 45 each'] },
+          { name:'Bridge',        variants:['45 sec','60 sec','75 sec','90 sec · pulse'] },
+        ]},
+        { id:'yoga', name:'Floor Finish', intent:'Soft, low, slow.', exercises:[
+          { name:'Happy Baby',   variants:['45 sec','60 sec','75 sec','90 sec'] },
+          { name:'Supine Twist', variants:['45 sec each','60 sec each','75 sec each','90 sec each'] },
+          { name:'Savasana',     variants:['90 sec','120 sec','150 sec','180 sec'] },
+        ]},
+        { id:'meditation', name:'Meditation', intent:'Sit. Breathe. Done.', exercises:[
+          { name:'Box Breath', variants:['4·4·4·4','4·4·4·4','5·5·5·5','6·6·6·6'] },
+        ]},
+      ],
+    },
+  ],
+};
+
+// ═══════════════════════════════════════════════════════
+// EXERCISE DESCRIPTIONS & GIF QUERIES
+// ═══════════════════════════════════════════════════════
+const EX_INFO = {
+  'Cat–Cow':           { desc:'On all fours. Arch your back up toward the ceiling (Cat), then let it sink toward the floor while lifting your head (Cow). Move slowly with your breath.', gif:'cat cow yoga exercise' },
+  "World's Greatest":  { desc:'Step into a deep lunge. Place the same-side hand on the floor, then rotate and reach the other hand toward the ceiling. Opens hips, thoracic spine, and chest at once.', gif:'world greatest stretch exercise' },
+  'Hip 90/90 Switch':  { desc:'Sit with both knees bent at 90°. Rotate both legs to switch sides in one smooth movement. Keep your torso upright throughout.', gif:'hip 90 90 stretch mobility' },
+  'Jumping Jacks':     { desc:'Start standing. Jump your feet wide while raising arms overhead, then jump back to start. Maintain a steady rhythm and light landing.', gif:'jumping jacks exercise cardio' },
+  'Arm Circles':       { desc:'Stand with arms out to the sides. Make small to large circles forward, then reverse. Keep shoulders relaxed, not shrugged.', gif:'arm circles warm up exercise' },
+  'High Knees':        { desc:'Run in place, driving each knee up to hip height. Pump your arms for rhythm. Stay on the balls of your feet.', gif:'high knees cardio exercise' },
+  'Push-Up':           { desc:'Plank position, hands shoulder-width. Lower your chest to the floor with elbows at 45°, then push back up. Keep your body straight as a board.', gif:'push up exercise proper form' },
+  'Squat':             { desc:'Feet shoulder-width, toes slightly out. Push hips back and down until thighs are parallel to the floor. Drive through your heels to stand.', gif:'bodyweight squat exercise form' },
+  'Bent-over Row':     { desc:'Hinge at the hips with a flat back. Pull your elbows back and up, squeezing shoulder blades together. Control the lowering phase.', gif:'bent over row exercise dumbbell form' },
+  'Glute Bridge':      { desc:'Lie on your back, feet flat. Push your hips toward the ceiling, squeezing your glutes at the top. Hold briefly, then lower slowly.', gif:'glute bridge exercise form' },
+  'Dead Bug':          { desc:'Lie on your back, arms up, knees at 90°. Lower opposite arm and leg toward the floor while pressing your lower back down. Alternate sides.', gif:'dead bug exercise core' },
+  "Child's Pose":      { desc:'Kneel and stretch your arms forward, forehead to the floor. Breathe into your lower back. Let gravity melt tension away.', gif:'child pose yoga stretch' },
+  'Down Dog → Cobra':  { desc:'From downward dog, flow forward into cobra by lowering hips and lifting your chest. Reverse back to downdog. Let each breath guide the movement.', gif:'downward dog cobra yoga flow' },
+  'Pigeon':            { desc:'From plank, bring one knee forward behind your wrist. Sink your hips and fold forward over the front leg. Deep hip opener — breathe through any tightness.', gif:'pigeon pose yoga hip opener' },
+  'Box Breath':        { desc:'Inhale for 4 counts, hold for 4, exhale for 4, hold for 4. This activates your parasympathetic nervous system — the "rest and digest" response.', gif:'box breathing meditation relaxation' },
+  'Chin Tucks':        { desc:'Sitting tall, gently pull your chin straight back (not down). You should feel a stretch at the base of your skull. Counteracts forward head posture.', gif:'chin tuck neck exercise posture' },
+  'Thoracic Ext.':     { desc:'Place a foam roller or rolled towel across your mid-back. Gently extend over it, opening the chest. Move the roller up your spine segment by segment.', gif:'thoracic extension foam roller exercise' },
+  'Doorway Pec':       { desc:'Stand in a doorway, arms at 90°. Lean forward until you feel a stretch across your chest. Hold and breathe deeply into the stretch.', gif:'doorway chest stretch pec stretch' },
+  'Scapular CARs':     { desc:'Controlled articular rotations of the shoulder blade. Protract, elevate, retract, and depress in a full circle. Move slowly and intentionally.', gif:'scapular rotation exercise shoulder' },
+  'Wall Slide':        { desc:'Stand with your back against a wall, arms in a goalpost position. Slide your arms overhead while keeping contact with the wall throughout.', gif:'wall slide exercise shoulder posture' },
+  'March in Place':    { desc:'Lift alternating knees to hip height with a slight arm swing. Gentle cardio activation — focus on posture and breathing, not speed.', gif:'marching in place exercise warm up' },
+  'Band Pull-Apart':   { desc:'Hold a resistance band at shoulder height. Pull it apart by squeezing your shoulder blades together. Control the return. Targets rear deltoids and rhomboids.', gif:'band pull apart exercise posture' },
+  'Y-T-W on Floor':    { desc:'Lie face down. Raise arms into a Y, then T, then W shape — each targets different muscles of the upper back and rotator cuff. Lift only as high as you can without pain.', gif:'YTW exercise upper back floor' },
+  'Wall Angels':       { desc:'Stand with your back flat against a wall, arms in a goalpost shape. Slowly raise your arms overhead while maintaining full contact with the wall.', gif:'wall angels exercise posture' },
+  'Bird Dog':          { desc:'On all fours, extend one arm and the opposite leg simultaneously. Keep your hips level and core braced. Think "long," not "high."', gif:'bird dog exercise core stability' },
+  'Sphinx':            { desc:'Lie on your belly, forearms flat. Gently press up, opening your chest. This is a passive lumbar extension — let gravity do the work while you breathe.', gif:'sphinx pose yoga backbend' },
+  'Seated Twist':      { desc:'Sit cross-legged or with legs extended. Rotate your torso to one side, placing your hand behind you for support. Lengthen your spine with each inhale, deepen the twist with each exhale.', gif:'seated spinal twist yoga' },
+  'Legs Up The Wall':  { desc:'Lie on your back with legs resting vertically up a wall. This inverts blood flow from your lower body — a powerful restorative pose for recovery.', gif:'legs up the wall yoga restorative' },
+  'Belly Breathing':   { desc:'One hand on your chest, one on your belly. Breathe so only your belly hand rises. This activates the diaphragm and signals your nervous system to calm.', gif:'belly breathing diaphragm exercise' },
+  'Neck Rolls':        { desc:'Slowly drop your ear to your shoulder, then roll your chin to your chest and to the other side. Move gently — never roll backward past neutral.', gif:'neck rolls stretch exercise' },
+  'Ankle Circles':     { desc:'Lift one foot and draw large circles with your toes — clockwise then counterclockwise. Warms the ankle joint and improves foot proprioception.', gif:'ankle circles mobility exercise' },
+  'Surya A':           { desc:'Sun Salutation A: Mountain → Forward Fold → Half Lift → Plank → Chaturanga → Updog → Downdog → repeat. Flow with your breath — inhale to lift, exhale to fold.', gif:'sun salutation A yoga flow' },
+  'Standing Fold':     { desc:'Stand with feet together, hinge at the hips and let your torso hang heavy. Bend your knees slightly if needed. Let gravity lengthen your hamstrings and spine.', gif:'standing forward fold yoga hamstring' },
+  'Warrior II':        { desc:'Wide stance, front knee bent over ankle, back leg straight. Arms stretched long at shoulder height. Gaze over your front hand. Ground through the outer edge of your back foot.', gif:'warrior 2 yoga pose' },
+  'Triangle':          { desc:'Wide stance, front leg straight. Reach your front hand toward your shin or the floor, top arm toward the ceiling. Keep both sides of the torso long.', gif:'triangle pose yoga trikonasana' },
+  'Tree Pose':         { desc:'Balance on one foot. Place the other foot on your calf or inner thigh (never the knee). Find a fixed gaze point. Press foot and leg together for stability.', gif:'tree pose yoga balance' },
+  'Chair → Twist':     { desc:'Sink into Chair Pose (utkatasana), then bring hands to heart and twist one elbow outside the opposite knee. Alternate sides. Fires up legs and spine simultaneously.', gif:'chair pose twist yoga utkatasana' },
+  'Bridge':            { desc:'Lie on your back, feet flat and hip-width. Press through your feet to lift your hips. Interlace your hands under your back and roll your shoulders under. Hold and breathe.', gif:'bridge pose yoga setu bandhasana' },
+  'Happy Baby':        { desc:'Lie on your back, grab the outer edges of your feet. Gently pull your knees toward your armpits. Rock side to side for a gentle spinal massage.', gif:'happy baby pose yoga ananda balasana' },
+  'Supine Twist':      { desc:'Lie on your back. Draw one knee to your chest and let it cross over your body. Extend that arm out and look the other way. Breathe into the rotation.', gif:'supine spinal twist yoga pose' },
+  'Savasana':          { desc:'Lie flat on your back, arms slightly away from the body, palms up. Close your eyes. Simply let your body be heavy. This is where your practice integrates.', gif:'savasana corpse pose yoga relaxation' },
+};
+
+function getExInfo(name) {
+  return EX_INFO[name] || {
+    desc: 'Follow the movement shown. Focus on control and breathing throughout.',
+    gif: `${name.toLowerCase().replace(/[^a-z0-9 ]/g,' ')} exercise`,
+  };
+}
+
+// GIF cache
+const gifCache = {};
+async function fetchGif(query) {
+  if (gifCache[query]) return gifCache[query];
+  try {
+    const res = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q=${encodeURIComponent(query)}&limit=5&rating=g`);
+    const data = await res.json();
+    if (data.data?.length) {
+      const url = data.data[0].images.fixed_height.url;
+      gifCache[query] = url;
+      return url;
+    }
+  } catch {}
+  return null;
+}
+
+function phaseSeconds(totalMin) {
+  const s = PROGRAM.phaseShare, total = totalMin * 60;
+  return {
+    stretch: Math.round(total * s.stretch),
+    warmup:  Math.round(total * s.warmup),
+    main:    Math.round(total * s.main),
+    yoga:    Math.round(total * s.yoga),
+    meditation: 180,
+  };
+}
+
+function buildTimeline(dayIdx, week, totalMin) {
+  const day = PROGRAM.days[dayIdx];
+  const totals = phaseSeconds(totalMin);
+  const out = [];
+  day.phases.forEach((ph, pi) => {
+    if (ph.id === 'meditation') {
+      out.push({ phaseIdx:pi, phaseId:ph.id, phaseName:ph.name, intent:ph.intent,
+        exIdx:0, exName:ph.exercises[0].name, variant:ph.exercises[0].variants[week-1],
+        seconds:totals.meditation, kind:'meditation' });
+      return;
+    }
+    const each = Math.max(20, Math.round(totals[ph.id] / ph.exercises.length));
+    ph.exercises.forEach((ex, ei) => {
+      out.push({ phaseIdx:pi, phaseId:ph.id, phaseName:ph.name, intent:ph.intent,
+        exIdx:ei, exName:ex.name, variant:ex.variants[week-1], seconds:each, kind:'exercise' });
+    });
+  });
+  return out;
+}
+
+function fmt(s) {
+  if (s < 0) s = 0;
+  return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+let state = {
+  view: 'home',
+  week: 1, day: 0,
+  timeline: [],
+  idx: 0,
+  left: 0,
+  paused: false,
+  progress: {},
+};
+
+try { state.progress = JSON.parse(localStorage.getItem('mf.progress') || '{}'); } catch {}
+function saveProgress() { try { localStorage.setItem('mf.progress', JSON.stringify(state.progress)); } catch {} }
+
+function nextSession() {
+  for (let w = 1; w <= 4; w++)
+    for (let d = 0; d < 3; d++)
+      if (!state.progress[`w${w}d${d}`]) return { week: w, day: d };
+  return { week: 4, day: 2 };
+}
+const ns = nextSession();
+state.week = ns.week; state.day = ns.day;
+
+const SESSION_MIN = 35;
+let timerInterval = null;
+
+// ═══════════════════════════════════════════════════════
+// RENDER ENGINE
+// ═══════════════════════════════════════════════════════
+function render() {
+  const root = document.getElementById('root');
+  root.innerHTML = '';
+  root.style.cssText = `height:100dvh;display:flex;flex-direction:column;background:${T.bg};color:${T.fg};font-family:${T.body};-webkit-font-smoothing:antialiased;overflow:hidden;animation:rise .25s ease;`;
+
+  if (state.view === 'home')      renderHome(root);
+  else if (state.view === 'preview')  renderPreview(root);
+  else if (state.view === 'session')  renderSession(root);
+  else if (state.view === 'done')     renderDone(root);
+  else if (state.view === 'program')  renderProgram(root);
+}
+
+// ═══════════════════════════════════════════════════════
+// HOME
+// ═══════════════════════════════════════════════════════
+function renderHome(root) {
+  const day = PROGRAM.days[state.day];
+  const totalDone = Object.keys(state.progress).length;
+  const doneThisWeek = [0,1,2].map(d => !!state.progress[`w${state.week}d${d}`]);
+
+  const scroll = el('div', `flex:1;overflow-y:auto;padding-top:calc(env(safe-area-inset-top,12px) + 16px);`);
+  const pad = el('div', `padding:0 22px;display:flex;flex-direction:column;gap:22px;`);
+
+  // numeric eyebrow
+  const eyebrow = el('div', `display:flex;align-items:baseline;gap:14px;`);
+  const mono = el('div', `font-family:${T.mono_ff};font-size:52px;font-weight:500;line-height:0.9;letter-spacing:-2px;color:${T.fg};`);
+  const dot = el('span', `color:${T.accent};`); dot.textContent = '·';
+  mono.textContent = `W${state.week}`;
+  mono.appendChild(dot);
+  mono.appendChild(document.createTextNode(`D${state.day+1}`));
+  const line = el('div', `flex:1;height:1px;background:${T.hairline};align-self:center;`);
+  const cnt = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:1.5px;`);
+  cnt.textContent = `${totalDone}/12`;
+  eyebrow.append(mono, line, cnt);
+
+  // day title
+  const titleWrap = el('div', ``);
+  const parts = day.title.split(' · ');
+  const titleDiv = el('div', `font-family:${T.display};font-size:44px;font-weight:700;line-height:0.95;text-transform:uppercase;letter-spacing:-1.2px;`);
+  parts.forEach((p, i) => {
+    const d2 = el('div', i === 1 ? `color:${T.accent};` : '');
+    d2.textContent = p;
+    titleDiv.appendChild(d2);
+  });
+  const kickerDiv = el('div', `margin-top:8px;font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:1.5px;text-transform:uppercase;`);
+  kickerDiv.textContent = `${day.kicker} · ${SESSION_MIN} min`;
+  titleWrap.append(titleDiv, kickerDiv);
+
+  // BEGIN button
+  const beginBtn = el('button', `appearance:none;border:none;background:${T.accent};color:${T.accentT};border-radius:6px;padding:20px 22px;display:flex;align-items:center;justify-content:space-between;font-family:${T.display};font-weight:700;font-size:18px;letter-spacing:0.5px;text-transform:uppercase;width:100%;`);
+  const beginL = el('span', `display:flex;align-items:center;gap:12px;`);
+  beginL.innerHTML = `${iconPlay(T.accentT)} Begin`;
+  const beginR = el('span', `font-family:${T.mono_ff};font-size:13px;font-weight:500;`);
+  beginR.textContent = `${SESSION_MIN}:00`;
+  beginBtn.append(beginL, beginR);
+  beginBtn.onclick = startSession;
+
+  // phase breakdown
+  const phaseBreak = renderPhaseChips(day);
+
+  // This week
+  const weekSection = el('div', ``);
+  weekSection.appendChild(sectionHeader('This week'));
+  const weekRow = el('div', `display:flex;gap:6px;margin-top:10px;`);
+  [0,1,2].forEach(d2 => {
+    const done = doneThisWeek[d2];
+    const isToday = d2 === state.day;
+    const btn = el('button', `flex:1;border:none;background:${done ? T.accent : T.card};color:${done ? T.accentT : T.fg};border-radius:6px;padding:14px 12px;text-align:left;${isToday && !done ? `outline:1.5px solid ${T.accent};outline-offset:-1.5px;` : ''}`);
+    const lbl = el('div', `font-family:${T.mono_ff};font-size:10px;letter-spacing:1.5px;opacity:0.7;text-transform:uppercase;`);
+    lbl.textContent = `D${d2+1}`;
+    const status = el('div', `font-family:${T.display};font-weight:700;font-size:18px;margin-top:6px;line-height:1;text-transform:uppercase;letter-spacing:0.5px;`);
+    status.textContent = done ? 'Done' : isToday ? 'Today' : 'Open';
+    const tag = el('div', `font-family:${T.mono_ff};font-size:10px;margin-top:6px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;`);
+    tag.textContent = PROGRAM.days[d2].tag;
+    btn.append(lbl, status, tag);
+    btn.onclick = () => pickDay(state.week, d2);
+    weekRow.appendChild(btn);
+  });
+  weekSection.appendChild(weekRow);
+
+  // 4-week progress grid
+  const progGrid = renderProgressGrid();
+
+  // Full program link
+  const progBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
+  progBtn.innerHTML = `<span>4-week program</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
+  progBtn.onclick = () => { state.view = 'program'; render(); };
+
+  pad.append(eyebrow, titleWrap, beginBtn, phaseBreak, weekSection, progGrid, progBtn, el('div', `height:40px;`));
+  scroll.appendChild(pad);
+  root.appendChild(scroll);
+}
+
+function renderPhaseChips(day) {
+  const totals = phaseSeconds(SESSION_MIN);
+  const wrap = el('div', ``);
+  wrap.appendChild(sectionHeader('Session breakdown'));
+  const list = el('div', `margin-top:10px;display:flex;flex-direction:column;gap:4px;`);
+  day.phases.forEach((ph, i) => {
+    const mins = ph.id === 'meditation' ? 3 : Math.round(totals[ph.id] / 60);
+    const pct = Math.min(100, (mins / SESSION_MIN) * 100);
+    const row = el('div', `display:flex;align-items:center;gap:8px;`);
+    const num = el('span', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};width:18px;letter-spacing:1px;`);
+    num.textContent = `0${i+1}`;
+    const name = el('span', `font-family:${T.display};font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`);
+    name.textContent = ph.name;
+    const bar = el('div', `flex:1;height:6px;background:${T.pill};border-radius:2px;position:relative;`);
+    const fill = el('div', `position:absolute;left:0;top:0;bottom:0;width:${pct}%;background:${i === day.phases.length-1 ? T.accent : T.fg};border-radius:2px;`);
+    bar.appendChild(fill);
+    const time = el('span', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};width:28px;text-align:right;`);
+    time.textContent = `${mins}m`;
+    row.append(num, name, bar, time);
+    list.appendChild(row);
+  });
+  wrap.appendChild(list);
+  return wrap;
+}
+
+function renderProgressGrid() {
+  const wrap = el('div', ``);
+  wrap.appendChild(sectionHeader('4-week progress'));
+  const grid = el('div', `margin-top:10px;display:grid;grid-template-columns:auto repeat(3,1fr);gap:6px;align-items:center;`);
+  grid.appendChild(el('span', ``));
+  [0,1,2].forEach(d => {
+    const lbl = el('span', `font-family:${T.mono_ff};font-size:9px;color:${T.mono};letter-spacing:1px;text-transform:uppercase;text-align:center;`);
+    lbl.textContent = `D${d+1}`;
+    grid.appendChild(lbl);
+  });
+  [1,2,3,4].forEach(w => {
+    const wlbl = el('span', `font-family:${T.mono_ff};font-size:9px;color:${T.mono};letter-spacing:1px;`);
+    wlbl.textContent = `W${w}`;
+    grid.appendChild(wlbl);
+    [0,1,2].forEach(d => {
+      const done = !!state.progress[`w${w}d${d}`];
+      const btn = el('button', `border:none;height:28px;border-radius:2px;background:${done ? T.accent : T.pill};width:100%;`);
+      btn.onclick = () => pickDay(w, d);
+      grid.appendChild(btn);
+    });
+  });
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+// ═══════════════════════════════════════════════════════
+// SESSION START
+// ═══════════════════════════════════════════════════════
+function startSession() {
+  clearInterval(timerInterval);
+  state.timeline = buildTimeline(state.day, state.week, SESSION_MIN);
+  state.idx = 0;
+  state.left = state.timeline[0].seconds;
+  state.paused = false;
+  state.view = 'preview';
+  render();
+}
+
+function pickDay(w, d) {
+  state.week = w; state.day = d;
+  startSession();
+}
+
+function startTimer() {
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    if (state.paused) return;
+    state.left--;
+    if (state.left <= 0) {
+      clearInterval(timerInterval);
+      beep();
+      if (state.idx + 1 < state.timeline.length) {
+        state.idx++;
+        state.left = state.timeline[state.idx].seconds;
+        state.view = 'preview';
+        render();
+      } else {
+        finishSession();
+      }
+    } else {
+      updateTimerDisplay();
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  const cur = state.timeline[state.idx];
+
+  const numEl = document.getElementById('timer-num');
+  if (numEl) numEl.textContent = fmt(state.left);
+
+  const medCountdown = document.getElementById('med-countdown');
+  if (medCountdown) {
+    medCountdown.textContent = fmt(state.left);
+    const { label, scale, phaseDur, withinPhase } = getMedState();
+    const boxEl = document.getElementById('med-box');
+    const labelEl = document.getElementById('med-label');
+    const countEl = document.getElementById('med-count');
+    if (boxEl) boxEl.style.transform = `scale(${scale})`;
+    if (labelEl) labelEl.textContent = label;
+    if (countEl) countEl.textContent = Math.max(0, phaseDur - withinPhase);
+  }
+
+  const progEl = document.getElementById('session-prog');
+  if (progEl) {
+    const totalSec = state.timeline.reduce((a, t) => a + t.seconds, 0);
+    const doneSec = state.timeline.slice(0, state.idx).reduce((a, t) => a + t.seconds, 0) + (cur.seconds - state.left);
+    progEl.style.width = `${(doneSec / totalSec) * 100}%`;
+  }
+}
+
+function getMedState() {
+  const cur = state.timeline[state.idx];
+  const m = cur.variant.match(/(\d+)/g);
+  const phases = m ? m.slice(0, 4).map(Number) : [4, 4, 4, 4];
+  const cycleSec = phases.reduce((a, b) => a + b, 0);
+  const elapsed = cur.seconds - state.left;
+  const inCycle = elapsed % cycleSec;
+  const phaseLabels = ['Inhale', 'Hold', 'Exhale', 'Hold'];
+  let phaseIdx = 0, accum = 0, withinPhase = 0;
+  for (let i = 0; i < 4; i++) {
+    if (inCycle < accum + phases[i]) { phaseIdx = i; withinPhase = inCycle - accum; break; }
+    accum += phases[i];
+  }
+  const phaseDur = phases[phaseIdx];
+  let scale = 0.55;
+  if (phaseIdx === 0) scale = 0.55 + 0.45 * (withinPhase / phaseDur);
+  else if (phaseIdx === 1) scale = 1;
+  else if (phaseIdx === 2) scale = 1 - 0.45 * (withinPhase / phaseDur);
+  return { phases, phaseIdx, withinPhase, phaseDur, label: phaseLabels[phaseIdx], scale };
+}
+
+// ═══════════════════════════════════════════════════════
+// PREVIEW — GIF + description before each exercise
+// ═══════════════════════════════════════════════════════
+function renderPreview(root) {
+  const cur = state.timeline[state.idx];
+  const day_ = PROGRAM.days[state.day];
+  const info = getExInfo(cur.exName);
+
+  // header
+  const hdr = el('div', `padding:calc(env(safe-area-inset-top,12px) + 12px) 22px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;`);
+  const closeBtn = el('button', `appearance:none;border:1px solid ${T.hairline};background:transparent;color:${T.fg};width:36px;height:36px;border-radius:6px;display:flex;align-items:center;justify-content:center;`);
+  closeBtn.innerHTML = iconClose(T.fg);
+  closeBtn.onclick = abortSession;
+  const hdrMid = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:2px;text-align:center;`);
+  hdrMid.innerHTML = `<div>W${state.week}·D${state.day+1}</div><div style="margin-top:2px;opacity:0.6;">${cur.phaseName}</div>`;
+  hdr.append(closeBtn, hdrMid, el('div', `width:36px;`));
+
+  // phase progress bars
+  const phaseBars = el('div', `padding:0 22px;display:flex;gap:4px;flex-shrink:0;`);
+  day_.phases.forEach((ph, i) => {
+    const col = el('div', `flex:1;display:flex;flex-direction:column;gap:4px;`);
+    const bar = el('div', `height:3px;background:${i <= cur.phaseIdx ? T.accent : T.pill};`);
+    const lbl = el('div', `font-family:${T.mono_ff};font-size:9px;color:${i === cur.phaseIdx ? T.fg : T.mono};letter-spacing:1px;text-transform:uppercase;`);
+    lbl.textContent = ph.name.split(' ')[0];
+    col.append(bar, lbl);
+    phaseBars.appendChild(col);
+  });
+
+  // scrollable body
+  const body = el('div', `flex:1;overflow-y:auto;padding:20px 22px;display:flex;flex-direction:column;gap:18px;`);
+
+  const upTag = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.accent};letter-spacing:2px;text-transform:uppercase;`);
+  upTag.textContent = state.idx === 0 ? 'First up' : 'Up next';
+
+  const exTitle = el('div', `font-family:${T.display};font-weight:700;font-size:38px;line-height:0.95;text-transform:uppercase;letter-spacing:-1px;`);
+  exTitle.textContent = cur.exName;
+
+  // chips row
+  const chips = el('div', `display:flex;gap:8px;flex-wrap:wrap;`);
+  const makeChip = (label, val) => {
+    const chip = el('div', `display:inline-flex;align-items:center;gap:8px;background:${T.pill};border:1px solid ${T.hairline};border-radius:4px;padding:8px 12px;`);
+    const lbl2 = el('span', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:1.5px;text-transform:uppercase;`);
+    lbl2.textContent = label;
+    const div = el('span', `width:1px;height:14px;background:${T.hairline};`);
+    const val2 = el('span', `font-family:${T.mono_ff};font-size:13px;color:${T.fg};`);
+    val2.textContent = val;
+    chip.append(lbl2, div, val2);
+    return chip;
+  };
+  chips.append(makeChip(`Week ${state.week}`, cur.variant), makeChip('Duration', fmt(cur.seconds)));
+
+  // GIF box
+  const gifBox = el('div', `width:100%;aspect-ratio:16/9;border-radius:8px;background:${T.card};overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;border:1px solid ${T.hairline};`);
+  const gifLoader = el('div', `position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;`);
+  const spin = el('div', `width:28px;height:28px;border:2px solid ${T.hairline};border-top-color:${T.accent};border-radius:50%;animation:spin .7s linear infinite;`);
+  const gifTxt = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:1px;`);
+  gifTxt.textContent = 'Loading demo...';
+  gifLoader.append(spin, gifTxt);
+  gifBox.appendChild(gifLoader);
+  const gifImg = el('img', `width:100%;height:100%;object-fit:cover;display:none;`);
+  gifImg.alt = cur.exName;
+  gifImg.onload = () => { gifLoader.style.display = 'none'; gifImg.style.display = 'block'; };
+  gifImg.onerror = () => {
+    gifLoader.innerHTML = '';
+    const em = el('div', `font-size:52px;`); em.textContent = '🏃';
+    const nm = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};margin-top:6px;`);
+    nm.textContent = 'Demo not available';
+    gifLoader.append(em, nm);
+  };
+  gifBox.appendChild(gifImg);
+
+  // How-to
+  const descBox = el('div', `background:${T.card};border:1px solid ${T.hairline};border-radius:6px;padding:16px;`);
+  const descTitle = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.accent};letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;`);
+  descTitle.textContent = 'How to do it';
+  const descText = el('div', `font-size:14px;color:${T.fg};line-height:1.65;`);
+  descText.textContent = info.desc;
+  descBox.append(descTitle, descText);
+
+  // Intent
+  const intentBox = el('div', `display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:${T.pill};border-radius:6px;`);
+  const intentIcon = el('div', `font-size:16px;flex-shrink:0;margin-top:2px;`);
+  intentIcon.textContent = cur.kind === 'meditation' ? '🧘' : '💡';
+  const intentText = el('div', `font-size:13px;color:${T.sub};line-height:1.5;`);
+  intentText.textContent = cur.intent;
+  intentBox.append(intentIcon, intentText);
+
+  body.append(upTag, exTitle, chips, gifBox, descBox, intentBox, el('div', `height:20px;`));
+
+  // CTA
+  const ctaWrap = el('div', `padding:14px 22px;padding-bottom:calc(env(safe-area-inset-bottom,14px)+14px);flex-shrink:0;`);
+  const ctaBtn = el('button', `width:100%;appearance:none;border:none;background:${T.accent};color:${T.accentT};border-radius:6px;padding:20px 22px;font-family:${T.display};font-weight:700;font-size:18px;text-transform:uppercase;letter-spacing:0.5px;display:flex;align-items:center;justify-content:center;gap:12px;`);
+  ctaBtn.innerHTML = `${iconPlay(T.accentT)} <span>Ready — Let's go</span>`;
+  ctaBtn.onclick = () => { state.view = 'session'; render(); startTimer(); };
+  ctaWrap.appendChild(ctaBtn);
+
+  root.append(hdr, phaseBars, body, ctaWrap);
+
+  fetchGif(info.gif).then(url => { if (url) gifImg.src = url; else gifImg.onerror(); });
+}
+
+// ═══════════════════════════════════════════════════════
+// SESSION
+// ═══════════════════════════════════════════════════════
+function renderSession(root) {
+  const cur = state.timeline[state.idx];
+  const day_ = PROGRAM.days[state.day];
+  const totalSec = state.timeline.reduce((a, t) => a + t.seconds, 0);
+  const doneSec = state.timeline.slice(0, state.idx).reduce((a, t) => a + t.seconds, 0);
+
+  if (cur.kind === 'meditation') { renderMeditation(root); return; }
+
+  const hdr = el('div', `padding:calc(env(safe-area-inset-top,12px) + 12px) 22px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;`);
+  const closeBtn = el('button', `appearance:none;border:1px solid ${T.hairline};background:transparent;color:${T.fg};width:36px;height:36px;border-radius:6px;display:flex;align-items:center;justify-content:center;`);
+  closeBtn.innerHTML = iconClose(T.fg);
+  closeBtn.onclick = abortSession;
+  const hdrMid = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:2px;`);
+  hdrMid.textContent = `W${state.week}·D${state.day+1}·${String(state.idx+1).padStart(2,'0')}/${String(state.timeline.length).padStart(2,'0')}`;
+  hdr.append(closeBtn, hdrMid, el('div', `width:36px;`));
+
+  // phase bars
+  const phaseBars = el('div', `padding:0 22px;display:flex;gap:4px;flex-shrink:0;`);
+  day_.phases.forEach((ph, i) => {
+    const col = el('div', `flex:1;display:flex;flex-direction:column;gap:4px;`);
+    const bar = el('div', `height:3px;background:${i <= cur.phaseIdx ? T.accent : T.pill};`);
+    const lbl = el('div', `font-family:${T.mono_ff};font-size:9px;color:${i === cur.phaseIdx ? T.fg : T.mono};letter-spacing:1px;text-transform:uppercase;`);
+    lbl.textContent = ph.name.split(' ')[0];
+    col.append(bar, lbl);
+    phaseBars.appendChild(col);
+  });
+
+  const body = el('div', `flex:1;padding:20px 22px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;`);
+
+  const phaseTag = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.accent};letter-spacing:2px;text-transform:uppercase;`);
+  phaseTag.textContent = `${cur.phaseName} — ${cur.intent}`;
+
+  const exTitle = el('div', `font-family:${T.display};font-weight:700;font-size:42px;line-height:0.95;text-transform:uppercase;letter-spacing:-1px;`);
+  exTitle.textContent = cur.exName;
+
+  const variant = el('div', `font-family:${T.mono_ff};font-size:13px;color:${T.fg};letter-spacing:0.5px;`);
+  variant.textContent = cur.variant;
+
+  // big flat timer card
+  const timerCard = el('div', `border:1px solid ${T.hairline};border-radius:6px;padding:20px 22px;display:flex;justify-content:space-between;align-items:flex-end;`);
+  const timerL = el('div', ``);
+  const timerLbl = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:1.5px;text-transform:uppercase;`);
+  timerLbl.textContent = 'Remaining';
+  const timerNum = el('div', `font-family:${T.mono_ff};font-size:64px;font-weight:500;color:${T.fg};letter-spacing:-3px;line-height:0.9;margin-top:4px;font-variant-numeric:tabular-nums;`);
+  timerNum.id = 'timer-num';
+  timerNum.textContent = fmt(state.left);
+  timerL.append(timerLbl, timerNum);
+  const timerR = el('div', `text-align:right;max-width:140px;`);
+  const nextLbl = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:1.5px;text-transform:uppercase;`);
+  nextLbl.textContent = 'Next';
+  const nextName = el('div', `font-family:${T.display};font-weight:700;font-size:14px;margin-top:4px;text-transform:uppercase;letter-spacing:0.5px;color:${T.fg};`);
+  nextName.textContent = state.timeline[state.idx + 1]?.exName || 'Complete';
+  timerR.append(nextLbl, nextName);
+  timerCard.append(timerL, timerR);
+
+  // session progress bar
+  const progWrap = el('div', ``);
+  const progHdr = el('div', `display:flex;justify-content:space-between;font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:1.5px;text-transform:uppercase;`);
+  const sessLeft = el('span', ``); sessLeft.textContent = 'Session';
+  const sessRight = el('span', ``); sessRight.textContent = fmt(totalSec - doneSec) + ' left';
+  progHdr.append(sessLeft, sessRight);
+  const progBg = el('div', `height:4px;background:${T.pill};margin-top:6px;`);
+  const progFill = el('div', `height:100%;width:${(doneSec/totalSec)*100}%;background:${T.accent};`);
+  progFill.id = 'session-prog';
+  progBg.appendChild(progFill);
+  progWrap.append(progHdr, progBg);
+
+  body.append(phaseTag, exTitle, variant, timerCard, progWrap);
+
+  root.append(hdr, phaseBars, body, renderControls());
+}
+
+// ═══════════════════════════════════════════════════════
+// MEDITATION
+// ═══════════════════════════════════════════════════════
+function renderMeditation(root) {
+  const cur = state.timeline[state.idx];
+  const { label, scale, phaseDur, withinPhase } = getMedState();
+
+  const hdr = el('div', `padding:calc(env(safe-area-inset-top,12px)+12px) 22px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;`);
+  const closeBtn = el('button', `appearance:none;border:1px solid ${T.hairline};background:transparent;color:${T.fg};width:36px;height:36px;border-radius:6px;display:flex;align-items:center;justify-content:center;`);
+  closeBtn.innerHTML = iconClose(T.fg);
+  closeBtn.onclick = abortSession;
+  const hdrMid = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:2px;text-transform:uppercase;`);
+  hdrMid.textContent = `Meditation · ${cur.variant}`;
+  hdr.append(closeBtn, hdrMid, el('div', `width:36px;`));
+
+  const body = el('div', `flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:22px;gap:32px;`);
+
+  // box breathing visual
+  const boxWrap = el('div', `position:relative;width:260px;height:260px;display:flex;align-items:center;justify-content:center;`);
+  const outerRing = el('div', `position:absolute;inset:0;border-radius:8px;border:1px solid ${T.hairline};`);
+  const breathBox = el('div', `width:220px;height:220px;border-radius:8px;background:${T.accent}22;border:1.5px solid ${T.accent};transform:scale(${scale});transition:transform 1s linear;display:flex;align-items:center;justify-content:center;flex-direction:column;`);
+  breathBox.id = 'med-box';
+  const breathLabel = el('div', `font-family:${T.display};font-size:28px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:${T.fg};`);
+  breathLabel.id = 'med-label';
+  breathLabel.textContent = label;
+  const breathCount = el('div', `font-family:${T.mono_ff};font-size:36px;font-weight:500;color:${T.accent};margin-top:6px;font-variant-numeric:tabular-nums;letter-spacing:-1px;`);
+  breathCount.id = 'med-count';
+  breathCount.textContent = Math.max(0, phaseDur - withinPhase);
+  breathBox.append(breathLabel, breathCount);
+  boxWrap.append(outerRing, breathBox);
+
+  const timeRemain = el('div', `text-align:center;`);
+  const timeLbl = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:2px;text-transform:uppercase;`);
+  timeLbl.textContent = 'Time remaining';
+  const timeNum = el('div', `font-family:${T.mono_ff};font-size:32px;font-weight:500;color:${T.fg};margin-top:4px;font-variant-numeric:tabular-nums;letter-spacing:-1px;`);
+  timeNum.id = 'med-countdown';
+  timeNum.textContent = fmt(state.left);
+  timeRemain.append(timeLbl, timeNum);
+
+  body.append(boxWrap, timeRemain);
+  root.append(hdr, body, renderControls());
+}
+
+function renderControls() {
+  const ctrls = el('div', `padding:14px 22px;display:flex;gap:10px;flex-shrink:0;padding-bottom:calc(env(safe-area-inset-bottom,14px)+14px);`);
+  const pauseBtn = el('button', `flex:2;appearance:none;border:none;background:${T.fg};color:${T.bg};border-radius:6px;padding:18px;font-family:${T.display};font-weight:700;font-size:16px;text-transform:uppercase;letter-spacing:0.5px;display:flex;align-items:center;justify-content:center;gap:10px;`);
+  pauseBtn.id = 'pause-btn';
+  pauseBtn.innerHTML = `${state.paused ? iconPlay(T.bg) : iconPause(T.bg)} ${state.paused ? 'Resume' : 'Pause'}`;
+  pauseBtn.onclick = togglePause;
+  const skipBtn = el('button', `flex:1;appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:18px;font-family:${T.display};font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:0.5px;display:flex;align-items:center;justify-content:center;gap:8px;`);
+  skipBtn.innerHTML = `${iconNext(T.fg)} Skip`;
+  skipBtn.onclick = skipExercise;
+  ctrls.append(pauseBtn, skipBtn);
+  return ctrls;
+}
+
+function togglePause() {
+  state.paused = !state.paused;
+  const btn = document.getElementById('pause-btn');
+  if (btn) btn.innerHTML = `${state.paused ? iconPlay(T.bg) : iconPause(T.bg)} ${state.paused ? 'Resume' : 'Pause'}`;
+}
+
+function skipExercise() {
+  clearInterval(timerInterval);
+  if (state.idx + 1 < state.timeline.length) {
+    state.idx++;
+    state.left = state.timeline[state.idx].seconds;
+    state.view = 'preview';
+    render();
+  } else {
+    finishSession();
+  }
+}
+
+function abortSession() {
+  clearInterval(timerInterval);
+  const ns2 = nextSession();
+  state.week = ns2.week; state.day = ns2.day;
+  state.view = 'home';
+  render();
+}
+
+function finishSession() {
+  clearInterval(timerInterval);
+  const key = `w${state.week}d${state.day}`;
+  state.progress[key] = { done: true, at: Date.now() };
+  saveProgress();
+  state.view = 'done';
+  render();
+}
+
+// ═══════════════════════════════════════════════════════
+// DONE
+// ═══════════════════════════════════════════════════════
+function renderDone(root) {
+  const total = Object.keys(state.progress).length;
+  const wrap = el('div', `flex:1;display:flex;flex-direction:column;padding:calc(env(safe-area-inset-top,12px)+40px) 22px calc(env(safe-area-inset-bottom,14px)+24px);justify-content:space-between;`);
+
+  const top = el('div', ``);
+  const tag = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.accent};letter-spacing:2px;text-transform:uppercase;`);
+  tag.textContent = 'Session complete';
+  const title = el('div', `font-family:${T.display};font-size:52px;line-height:0.95;margin-top:12px;font-weight:700;text-transform:uppercase;letter-spacing:-1px;`);
+  title.innerHTML = `Done.<br><span style="color:${T.accent}">Banked.</span>`;
+  top.append(tag, title);
+
+  const stats = el('div', `display:flex;flex-direction:column;gap:12px;`);
+  [
+    ['Duration', `${SESSION_MIN} min`],
+    ['Phases', '5 · Bend → Meditation'],
+    ['Week', `${state.week} of 4 · day ${state.day + 1}`],
+    ['Program', `${total} of 12 sessions banked`],
+  ].forEach(([k, v]) => stats.appendChild(renderStat(k, v)));
+
+  const bankBtn = el('button', `appearance:none;border:none;background:${T.accent};color:${T.accentT};border-radius:6px;padding:18px 22px;font-family:${T.display};font-weight:700;font-size:16px;text-transform:uppercase;letter-spacing:0.5px;display:flex;align-items:center;justify-content:center;gap:10px;width:100%;`);
+  bankBtn.innerHTML = `${iconCheck(T.accentT)} Bank it`;
+  bankBtn.onclick = () => {
+    const ns2 = nextSession();
+    state.week = ns2.week; state.day = ns2.day;
+    state.view = 'home';
+    render();
+  };
+
+  wrap.append(top, stats, bankBtn);
+  root.appendChild(wrap);
+}
+
+// ═══════════════════════════════════════════════════════
+// PROGRAM
+// ═══════════════════════════════════════════════════════
+function renderProgram(root) {
+  const hdr = el('div', `padding:calc(env(safe-area-inset-top,12px)+12px) 22px 12px;display:flex;align-items:center;gap:14px;flex-shrink:0;`);
+  const backBtn = el('button', `appearance:none;border:1px solid ${T.hairline};background:transparent;color:${T.fg};width:36px;height:36px;border-radius:6px;display:flex;align-items:center;justify-content:center;`);
+  backBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" stroke="${T.fg}" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="10,2 4,7 10,12"/></svg>`;
+  backBtn.onclick = () => { state.view = 'home'; render(); };
+  const title = el('div', `font-family:${T.display};font-weight:700;font-size:22px;text-transform:uppercase;letter-spacing:0.5px;`);
+  title.textContent = '4-Week Program';
+  hdr.append(backBtn, title);
+
+  const scroll = el('div', `flex:1;overflow-y:auto;padding:0 22px;`);
+  const body = el('div', `display:flex;flex-direction:column;gap:28px;padding-bottom:40px;margin-top:8px;`);
+
+  PROGRAM.days.forEach((day, di) => {
+    const daySection = el('div', ``);
+    const dayHdr = el('div', `margin-bottom:14px;`);
+    const dayTag = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.accent};letter-spacing:2px;text-transform:uppercase;`);
+    dayTag.textContent = `Day ${di + 1} · ${day.tag}`;
+    const dayTitle = el('div', `font-family:${T.display};font-weight:700;font-size:28px;text-transform:uppercase;letter-spacing:-0.5px;line-height:1;margin-top:4px;`);
+    dayTitle.textContent = day.title;
+    const daySub = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};margin-top:4px;letter-spacing:1px;`);
+    daySub.textContent = day.kicker;
+    dayHdr.append(dayTag, dayTitle, daySub);
+
+    const phaseList = el('div', `display:flex;flex-direction:column;gap:6px;`);
+    day.phases.forEach(ph => {
+      const phCard = el('div', `background:${T.card};border:1px solid ${T.hairline};border-radius:6px;padding:14px;`);
+      const phHdr = el('div', `display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;`);
+      const phName = el('div', `font-family:${T.display};font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:0.5px;`);
+      phName.textContent = ph.name;
+      const phIntent = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:0.5px;max-width:200px;text-align:right;`);
+      phIntent.textContent = ph.intent;
+      phHdr.append(phName, phIntent);
+
+      const exList = el('div', `display:flex;flex-direction:column;gap:4px;`);
+      ph.exercises.forEach((ex, ei) => {
+        const row = el('div', `display:flex;align-items:baseline;gap:8px;`);
+        const num = el('span', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:1px;flex-shrink:0;`);
+        num.textContent = `${ei+1}.`;
+        const name = el('span', `font-size:13px;color:${T.fg};`);
+        name.textContent = ex.name;
+        const week1 = el('span', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};margin-left:auto;flex-shrink:0;`);
+        week1.textContent = `W1: ${ex.variants[0]}`;
+        row.append(num, name, week1);
+        exList.appendChild(row);
+      });
+      phCard.append(phHdr, exList);
+      phaseList.appendChild(phCard);
+    });
+
+    // week progression for this day
+    const weekProg = el('div', `margin-top:10px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;`);
+    [1,2,3,4].forEach(w => {
+      const done = !!state.progress[`w${w}d${di}`];
+      const btn = el('button', `border:none;background:${done ? T.accent : T.pill};color:${done ? T.accentT : T.mono};border-radius:4px;padding:10px 6px;font-family:${T.mono_ff};font-size:10px;letter-spacing:1px;text-transform:uppercase;`);
+      btn.textContent = done ? `W${w} ✓` : `W${w}`;
+      btn.onclick = () => pickDay(w, di);
+      weekProg.appendChild(btn);
+    });
+
+    daySection.append(dayHdr, phaseList, weekProg);
+    body.appendChild(daySection);
+  });
+
+  scroll.appendChild(body);
+  root.append(hdr, scroll);
+}
+
+// ═══════════════════════════════════════════════════════
+// SOUND
+// ═══════════════════════════════════════════════════════
+function beep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = 'sine'; o.frequency.setValueAtTime(660, ctx.currentTime);
+    g.gain.setValueAtTime(0.3, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    o.start(); o.stop(ctx.currentTime + 0.4);
+    if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
+  } catch {}
+}
+
+// ═══════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════
+render();
+</script>
+</body>
+</html>
