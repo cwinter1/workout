@@ -96,11 +96,13 @@ const PROGRAM = {
           { name:'High Knees',    variants:['30 sec','40 sec','45 sec','60 sec · arms drive'] },
         ]},
         { id:'main', name:'Main Set', intent:'3 rounds. Move with control.', exercises:[
-          { name:'Push-Up',      variants:['Knees · 8 reps','Incline · 10 reps','Standard · 10 reps','Decline · 8 reps · 3s down'] },
-          { name:'Squat',        variants:['Bodyweight · 12','Tempo 3-1-1 · 10','Split Squat · 8 each','Bulgarian · 8 each · pause'] },
-          { name:'Bent-over Row',variants:['Backpack 2kg · 10','Backpack 4kg · 10','Backpack 6kg · 12','Backpack 8kg · 12 · slow'] },
-          { name:'Glute Bridge', variants:['2-leg · 12','2-leg + hold 3s · 10','Single-leg · 8 each','Single-leg + hold 3s · 8 each'] },
-          { name:'Dead Bug',     variants:['6 each side','8 each · tempo','10 each · long lever','10 each · band pull'] },
+          { name:'Push-Up',                 variants:['Knees · 8 reps','Incline · 10 reps','Standard · 10 reps','Decline · 8 reps · 3s down'] },
+          { name:'Squat',                    variants:['Bodyweight · 12','Tempo 3-1-1 · 10','Split Squat · 8 each','Bulgarian · 8 each · pause'] },
+          { name:'Bent-over Row',            variants:['Backpack 2kg · 10','Backpack 4kg · 10','Backpack 6kg · 12','Backpack 8kg · 12 · slow'] },
+          { name:'Glute Bridge',             variants:['2-leg · 12','2-leg + hold 3s · 10','Single-leg · 8 each','Single-leg + hold 3s · 8 each'] },
+          { name:'Dead Bug',                 variants:['6 each side','8 each · tempo','10 each · long lever','10 each · band pull'] },
+          { name:'Wall Sit',                 variants:['30 sec · feet parallel','40 sec · feet parallel','45 sec · single leg 15s each','60 sec · single leg 20s each'] },
+          { name:'Terminal Knee Extension',  variants:['12 each leg · band light','15 each · band light','15 each · band medium · 2s hold','20 each · band medium · 2s hold'] },
         ]},
         { id:'yoga', name:'Yoga Cool-down', intent:'Tell the body the work is done.', exercises:[
           { name:"Child's Pose",    variants:['60 sec','75 sec','90 sec · side reach','90 sec · twisted'] },
@@ -126,11 +128,12 @@ const PROGRAM = {
           { name:'Inchworm',       variants:['4 reps slow','5 reps · pause at plank','6 reps + push-up at bottom','8 reps + push-up at bottom'] },
         ]},
         { id:'main', name:'Main Set', intent:'3 rounds. Posture under load.', exercises:[
-          { name:'Band Pull-Apart',variants:['15 reps · light','20 reps · light','15 reps · medium','20 reps · medium'] },
-          { name:'Y-T-W on Floor', variants:['5 each','6 each','8 each','8 each · 2s top'] },
-          { name:'Wall Angels',    variants:['8 slow','10 slow','12 slow','15 slow · pause'] },
-          { name:'Glute Bridge',   variants:['12','15 · 2s hold','Single-leg · 8 each','Single-leg · 10 each'] },
-          { name:'Bird Dog',       variants:['8 each','10 each · 2s hold','10 each + diagonal pulse','12 each + reach'] },
+          { name:'Band Pull-Apart',   variants:['15 reps · light','20 reps · light','15 reps · medium','20 reps · medium'] },
+          { name:'Y-T-W on Floor',   variants:['5 each','6 each','8 each','8 each · 2s top'] },
+          { name:'Wall Angels',      variants:['8 slow','10 slow','12 slow','15 slow · pause'] },
+          { name:'Glute Bridge',     variants:['12','15 · 2s hold','Single-leg · 8 each','Single-leg · 10 each'] },
+          { name:'Bird Dog',         variants:['8 each','10 each · 2s hold','10 each + diagonal pulse','12 each + reach'] },
+          { name:'Straight Leg Raise',variants:['8 each · slow','10 each · 2s hold top','12 each · 3s hold top','15 each · 3s hold + ankle weight optional'] },
         ]},
         { id:'yoga', name:'Yoga Cool-down', intent:'Lengthen the front, settle the spine.', exercises:[
           { name:'Sphinx',           variants:['60 sec','75 sec','90 sec','90 sec + breath'] },
@@ -218,7 +221,10 @@ const EX_INFO = {
   'Bridge':            { desc:'Lie on your back, feet flat and hip-width. Press through your feet to lift your hips. Interlace your hands under your back and roll your shoulders under. Hold and breathe.', gif:'yoga bridge pose glutes exercise' },
   'Happy Baby':        { desc:'Lie on your back, grab the outer edges of your feet. Gently pull your knees toward your armpits. Rock side to side for a gentle spinal massage.', gif:'happy baby pose yoga ananda balasana' },
   'Supine Twist':      { desc:'Lie on your back. Draw one knee to your chest and let it cross over your body. Extend that arm out and look the other way. Breathe into the rotation.', gif:'supine spinal twist yoga pose' },
-  'Savasana':          { desc:'Lie flat on your back, arms slightly away from the body, palms up. Close your eyes. Simply let your body be heavy. This is where your practice integrates.', gif:'savasana yoga final relaxation rest' },
+  'Savasana':               { desc:'Lie flat on your back, arms slightly away from the body, palms up. Close your eyes. Simply let your body be heavy. This is where your practice integrates.', gif:'savasana yoga final relaxation rest' },
+  'Wall Sit':               { desc:'Back flat against a wall, slide down until thighs are parallel to the floor. Feet hip-width, knees directly over ankles. Hold the position — this is pure quad endurance.', gif:'wall sit exercise quad strength' },
+  'Terminal Knee Extension':{ desc:'Anchor a resistance band behind you at knee height. Step into the loop with one leg. From a slight bend, press your knee straight against the band resistance. Isolates the VMO — the teardrop muscle that stabilises the kneecap.', gif:'terminal knee extension band exercise TKE' },
+  'Straight Leg Raise':     { desc:'Lie on your back, one leg bent with foot flat. Tighten the quad of the straight leg, then lift it to the height of the bent knee. Lower slowly. Safe quad activation — no knee compression.', gif:'straight leg raise exercise quad rehab' },
 };
 
 function getExInfo(name) {
@@ -269,7 +275,10 @@ const YT_IDS = {
   'Bridge':            'XMHf6FUGSmk',
   'Happy Baby':        'Ppku7i3ypGM',
   'Supine Twist':      'ezyMaQEaVaI',
-  'Savasana':          '1VYlOKUdylM',
+  'Savasana':               '1VYlOKUdylM',
+  'Wall Sit':               'k5jOQv-N8XQ',
+  'Terminal Knee Extension':'c9XfHNkB3d8',
+  'Straight Leg Raise':     'oPNqN2VfkSY',
 };
 
 const COACH_CUES = {
@@ -382,16 +391,30 @@ let timerInterval = null;
 
 let _audioCtx = null;
 let _wakeLock = null;
+let _noSleepVideo = null;
+function _ensureNoSleepVideo() {
+  if (_noSleepVideo) return;
+  _noSleepVideo = document.createElement('video');
+  _noSleepVideo.setAttribute('playsinline', '');
+  _noSleepVideo.setAttribute('muted', '');
+  _noSleepVideo.loop = true;
+  _noSleepVideo.style.cssText = 'position:fixed;top:-2px;left:-2px;width:1px;height:1px;opacity:0.01;pointer-events:none;z-index:-1;';
+  _noSleepVideo.src = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAA2JtZGF0AAACrgYF//+q3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE0MiByMjQ3OSBkZDc5YTYxIC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAxNCAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiBwaWN0LXN0cnVjdD0wIGludGVybGFjZWQ9MCBibHVyYXlfY29tcGF0PTAgY29uc3RyYWluZWRfaW50cmE9MCBiZnJhbWVzPTMgYl9weXJhbWlkPTIgYl9hZGFwdD0xIGJfYmlhcz0wIGRpcmVjdD0xIHdlaWdodGI9MSBvcGVuX2dvcD0wIHdlaWdodHA9MiBrZXlpbnQ9MjUwIGtleWludF9taW49MjUgc2NlbmVjdXQ9NDAgaW50cmFfcmVmcmVzaD0wIHJjX2xvb2thaGVhZD00MCByYz1jcmYgbWJ0cmVlPTEgY3JmPTIzLjAgcWNvbXA9MC42MCBxcG1pbj0wIHFwbWF4PTY5IHFwc3RlcD00IHZidl9tYXhyYXRlPTc2OCB2YnZfYnVmc2l6ZT0zMDAwIGNyZl9tYXg9MC4wIG5hbF9ocmQ9bm9uZSBmaWxsZXI9MCBpcF9yYXRpbz0xLjQwIGFxPTE6MS4wMACAAAAPZWxpYnggAAAHNm1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAPoAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAACFHRyYWsAAABcdGtoZAAAAA8AAAAAAAAAAAAAAAEAAAAAAAADhAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAAgAAAAIAAAAAACRlZHRzAAAAHGVsc3QAAAAAAAAAAQAAAnQAAAAAAAEAAAABhG1kaWEAAAAgbWRoZAAAAAAAAAAAAAAAAAAAAAQAAAAZVxAAAAAAAC1oZGxyAAAAAAAAAAB2aWRlAAAAAAAAAAAAAAAAVmlkZW9IYW5kbGVyAAAAATBtaW5mAAAAFHZtaGQAAAABAAAAAAAAAAAAAAAkZGluZgAAABxkcmVmAAAAAAAAAAEAAAAMdXJsIAAAAAEAAADwc3RibAAAAQBzdHNkAAAAAAAAAAEAAADwYXZjMQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAIAAIAASAAAAEgAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABj//wAAADZhdmNDASJAC//hABhnQgAlimRQWAAADxAAAWkAGPHCmWABAAZo6+PLIsAAAAAYc3R0cwAAAAAAAAABAAAAGQAAAgAAAAAUc3RzcwAAAAAAAAABAAAAAQAAAIhjdHRzAAAAAAAAABcAAAABAAACAAAAAAEAAAUAAAAAAQAAAgAAAAABAAAAAAAAAAEAAAIAAAAAAQAABQAAAAABAAACAAAAAAEAAAAAAAAAAQAAAgAAAAABAAACAAAAAAEAAAUAAAAAAQAAAgAAAAABAAAAAAAAAAEAAAIAAAAAAQAABQAAAAABAAACAAAAAAEAAAAAAAAAAQAAAgAAAAAcc3RzYwAAAAAAAAABAAAAAgAAAAgAAAABAAAATHN0c3oAAAAAAAAAAAAAABkAAADhAAAAbgAAAEsAAAAuAAAAKQAAACoAAAAnAAAAJgAAACcAAAAlAAAAJgAAACYAAAAlAAAAJQAAACYAAAAlAAAAJQAAACUAAAAlAAAAJQAAACUAAAAlAAAAJgAAAAhzdGNvAAAAAAAAAAEAAAAsAAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY1Ni40MC4xMDE=';
+  document.body.appendChild(_noSleepVideo);
+}
 async function acquireWakeLock() {
   try {
     if ('wakeLock' in navigator) {
       _wakeLock = await navigator.wakeLock.request('screen');
       _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+      return;
     }
   } catch {}
+  try { _ensureNoSleepVideo(); await _noSleepVideo.play(); } catch {}
 }
 function releaseWakeLock() {
   try { if (_wakeLock) { _wakeLock.release(); _wakeLock = null; } } catch {}
+  try { if (_noSleepVideo) _noSleepVideo.pause(); } catch {}
 }
 // Re-acquire if page becomes visible again (iOS tab switch)
 document.addEventListener('visibilitychange', () => {
