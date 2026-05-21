@@ -1032,7 +1032,27 @@ function renderPreview(root) {
   const ctaWrap = el('div', `padding:14px 22px;padding-bottom:calc(env(safe-area-inset-bottom,14px)+14px);flex-shrink:0;`);
   const ctaBtn = el('button', `width:100%;appearance:none;border:none;background:${T.accent};color:${T.accentT};border-radius:6px;padding:20px 22px;font-family:${T.display};font-weight:700;font-size:18px;text-transform:uppercase;letter-spacing:0.5px;display:flex;align-items:center;justify-content:center;gap:12px;`);
   ctaBtn.innerHTML = `${iconPlay(T.accentT)} <span>Ready — Let's go</span>`;
-  ctaBtn.onclick = () => { state.view = 'session'; render(); startTimer(); };
+  ctaBtn.onclick = () => {
+    state.view = 'session';
+    render();
+    // 3-2-1 countdown overlay before timer starts
+    const ov = el('div', `position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:${T.bg}cc;z-index:999;`);
+    const num = el('div', `font-family:${T.display};font-weight:700;font-size:120px;color:${T.fg};line-height:1;`);
+    ov.appendChild(num);
+    document.body.appendChild(ov);
+    let count = 3;
+    const tick = () => {
+      num.textContent = count;
+      beepTick(count === 1 ? 880 : 440);
+      if (count === 1) {
+        setTimeout(() => { ov.remove(); startTimer(); }, 900);
+      } else {
+        count--;
+        setTimeout(tick, 1000);
+      }
+    };
+    tick();
+  };
   ctaWrap.appendChild(ctaBtn);
 
   root.append(hdr, phaseBars, body, ctaWrap);
