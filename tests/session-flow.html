@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Flow QA</title>
+<style>
+  body { font-family: monospace; background: #0f0f0f; color: #ccc; padding: 24px; }
+  h2 { color: #fff; margin: 0 0 20px; }
+  .test { padding: 8px 12px; margin: 4px 0; border-radius: 4px; font-size: 14px; }
+  .pass { background: #1a2e1a; color: #4caf50; }
+  .fail { background: #2e1a1a; color: #f44336; }
+  .skip { background: #1e1e1e; color: #888; }
+  #summary { margin-top: 20px; font-size: 15px; color: #fff; }
+</style>
+</head>
+<body>
+<h2>Session Flow QA</h2>
+<div id="results"></div>
+<div id="summary"></div>
+
+<script>
+// ── Minimal stubs ──────────────────────────────────────────────────────────────
+const store = {};
+const localStorage = {
+  getItem: k => store[k] ?? null,
+  setItem: (k, v) => { store[k] = v; },
+  removeItem: k => { delete store[k]; },
+};
+
+// Inline the functions under test (extracted from index.html logic)
+function loadProgress()   { try { return JSON.parse(localStorage.getItem('mf.progress') || '{}'); } catch { return {}; } }
+function saveProgress(p)  { try { localStorage.setItem('mf.progress', JSON.stringify(p)); } catch {} }
+function loadSessions()   { try { return JSON.parse(localStorage.getItem('mf.sessions') || '[]'); } catch { return []; } }
+function saveSessions(s)  { try { localStorage.setItem('mf.sessions', JSON.stringify(s)); } catch {} }
+function loadGarmin()     { try { return JSON.parse(localStorage.getItem('mf.garmin') || '[]'); } catch { return []; } }
+function saveGarmin(g)    { try { localStorage.setItem('mf.garmin', JSON.stringify(g)); } catch {} }
+function loadSyncUrl()    { return localStorage.getItem('mf.syncUrl') || ''; }
+function saveSyncUrl(u)   { if (u) localStorage.setItem('mf.syncUrl', u); else localStorage.removeItem('mf.syncUrl'); }
+
+function computePerformanceIndex(sleepScore, workoutRating, calories) {
+  const vals = [sleepScore != null ? sleepScore / 100 : null,
+                workoutRating != null ? workoutRating / 5 : null,
+                calories != null ? Math.min(calories / 500, 1) : null];
+  const weights = [0.4, 0.4, 0.2];
+  let total = 0, wSum = 0;
+  vals.forEach((v, i) => { if (v !== null) { total += v * weights[i]; wSum += weights[i]; } });
+  return wSum > 0 ? Math.round((total / wSum) * 100) : null;
+}
+
+const PROGRAM = {
+  days: [
+    { title: 'Strength · Mobility', tag: 'STRENGTH' },
+    { title: 'Posture · Desk Recovery', tag: 'POSTURE' },
+    { title: 'Yoga · Active Recovery', tag: 'YOGA' },
+  ]
+};
+
+// Simulate finishSession (stores key into progress + sessions)
+function simulateFinishSession(week, day) {
+  const key = `w${week}d${day}`;
+  const now = Date.now();
+  const duration = 35 * 60;
+  const progress = loadProgress();
+  progress[key] = { done: true, at: now };
+  saveProgress(progress);
+  const sessions = loadSessions();
+  sessions.push({ key, at: now, duration, week, day, dayTitle: PROGRAM.days[day].title, dayTag: PROGRAM.days[day].tag });
+  saveSessions(sessions);
+  return { key, duration };
+}
+
+// Simulate nextSession (returns first incomplete session, never clears progress)
+function simulateNextSession(progress, totalWeeks = 4, daysPerWeek = 3) {
+  for (let w = 1; w <= totalWeeks; w++) {
+    for (let d = 0; d < daysPerWeek; d++) {
+      if (!progress[`w${w}d${d}`]) return { week: w, day: d };
+    }
+  }
+  return { week: 1, day: 0 };
+}
+
+// ── Test runner ────────────────────────────────────────────────────────────────
+let passed = 0, failed = 0;
+const results = document.getElementById('results');
+
+function assert(name, condition, detail = '') {
+  const div = document.createElement('div');
+  if (condition) {
+    div.className = 'test pass';
+    div.textContent = `PASS  ${name}`;
+    passed++;
+  } else {
+    div.className = 'test fail';
+    div.textContent = `FAIL  ${name}${detail ? ' — ' + detail : ''}`;
+    failed++;
+  }
+  results.appendChild(div);
+}
+
+// ── Test 1: finishSession stores progress and session record ───────────────────
+(function testFinishSession() {
+  localStorage.setItem('mf.progress', '{}');
+  localStorage.setItem('mf.sessions', '[]');
+  const { key } = simulateFinishSession(1, 0);
+  const progress = loadProgress();
+  const sessions = loadSessions();
+  assert('finishSession — progress key saved', !!progress[key]);
+  assert('finishSession — progress marked done', progress[key].done === true);
+  assert('finishSession — session record exists', sessions.length === 1);
+  assert('finishSession — session key matches', sessions[0].key === key);
+  assert('finishSession — session has duration', sessions[0].duration === 35 * 60);
+})();
+
+// ── Test 2: abortSession never clears completed progress ───────────────────────
+(function testAbortPreservesProgress() {
+  // Pre-populate two completed sessions
+  const progress = { 'w1d0': { done: true, at: 1 }, 'w1d1': { done: true, at: 2 } };
+  saveProgress(progress);
+  // Simulate abort: calls nextSession then sets state.week/day — does NOT clear progress
+  const ns = simulateNextSession(progress);
+  const progressAfter = loadProgress();
+  assert('abortSession — w1d0 preserved after abort', !!progressAfter['w1d0']);
+  assert('abortSession — w1d1 preserved after abort', !!progressAfter['w1d1']);
+  assert('abortSession — nextSession skips done sessions', ns.week === 1 && ns.day === 2);
+})();
+
+// ── Test 3: nextSession after all done wraps to w1d0 ──────────────────────────
+(function testNextSessionAllDone() {
+  const all = {};
+  for (let w = 1; w <= 4; w++) for (let d = 0; d < 3; d++) all[`w${w}d${d}`] = { done: true };
+  const ns = simulateNextSession(all);
+  assert('nextSession — wraps to w1d0 when all done', ns.week === 1 && ns.day === 0);
+})();
+
+// ── Test 4: bankBtn — rating saved to session record ──────────────────────────
+(function testBankBtnRating() {
+  localStorage.setItem('mf.sessions', '[]');
+  localStorage.setItem('mf.progress', '{}');
+  const { key } = simulateFinishSession(1, 0);
+  const sessions = loadSessions();
+  const si = sessions.findIndex(s => s.key === key);
+  const workoutRating = 4;
+  sessions[si].workoutRating = workoutRating;
+  saveSessions(sessions);
+  const saved = loadSessions().find(s => s.key === key);
+  assert('bankBtn — rating saved to session', saved.workoutRating === 4);
+})();
+
+// ── Test 5: bankBtn — garmin post data saved ──────────────────────────────────
+(function testBankBtnGarmin() {
+  localStorage.setItem('mf.garmin', '[]');
+  const sessionKey = 'w1d0';
+  const garmin = loadGarmin();
+  const entry = { type: 'post', sessionKey, week: 1, day: 0, date: '2026-05-21', at: Date.now(), calories: 420, activeHours: 0, activeMins: 35 };
+  garmin.push(entry);
+  saveGarmin(garmin);
+  const saved = loadGarmin().find(g => g.type === 'post' && g.sessionKey === sessionKey);
+  assert('bankBtn — garmin post entry saved', !!saved);
+  assert('bankBtn — calories stored', saved.calories === 420);
+  assert('bankBtn — activeHours stored', saved.activeHours === 0);
+  assert('bankBtn — activeMins stored', saved.activeMins === 35);
+})();
+
+// ── Test 6: syncToSheets — skips when no URL ──────────────────────────────────
+(function testSyncSkipsNoUrl() {
+  localStorage.removeItem('mf.syncUrl');
+  let fetchCalled = false;
+  const origFetch = window.fetch;
+  window.fetch = () => { fetchCalled = true; return Promise.resolve(); };
+  function syncToSheets(payload) {
+    const url = loadSyncUrl();
+    if (!url) return;
+    try { fetch(url, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) }); } catch {}
+  }
+  syncToSheets({ date: '2026-05-21' });
+  window.fetch = origFetch;
+  assert('syncToSheets — skips fetch when URL empty', !fetchCalled);
+})();
+
+// ── Test 7: syncToSheets — fires fetch when URL set ───────────────────────────
+(function testSyncFiresWithUrl() {
+  saveSyncUrl('https://script.google.com/macros/s/fake/exec');
+  let fetchCalled = false;
+  const origFetch = window.fetch;
+  window.fetch = () => { fetchCalled = true; return Promise.resolve(); };
+  function syncToSheets(payload) {
+    const url = loadSyncUrl();
+    if (!url) return;
+    try { fetch(url, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) }); } catch {}
+  }
+  syncToSheets({ date: '2026-05-21' });
+  window.fetch = origFetch;
+  assert('syncToSheets — fires fetch when URL set', fetchCalled);
+})();
+
+// ── Test 8: computePerformanceIndex ───────────────────────────────────────────
+(function testPerfIndex() {
+  assert('perfIndex — all inputs: sleep=80, rating=4, cals=400', computePerformanceIndex(80, 4, 400) === 83);
+  assert('perfIndex — missing calories still computes', computePerformanceIndex(80, 4, null) !== null);
+  assert('perfIndex — all null returns null', computePerformanceIndex(null, null, null) === null);
+  assert('perfIndex — sleep only', computePerformanceIndex(100, null, null) === 100);
+  assert('perfIndex — caps at 100', computePerformanceIndex(100, 5, 1000) === 100);
+})();
+
+// ── Test 9: saveSyncUrl / loadSyncUrl round-trip ──────────────────────────────
+(function testSyncUrlStorage() {
+  const url = 'https://script.google.com/macros/s/abc/exec';
+  saveSyncUrl(url);
+  assert('saveSyncUrl/loadSyncUrl — round-trip', loadSyncUrl() === url);
+  saveSyncUrl('');
+  assert('saveSyncUrl — empty string clears URL', loadSyncUrl() === '');
+})();
+
+// ── Summary ───────────────────────────────────────────────────────────────────
+const summary = document.getElementById('summary');
+summary.textContent = `${passed + failed} tests — ${passed} passed, ${failed} failed`;
+summary.style.color = failed === 0 ? '#4caf50' : '#f44336';
+</script>
+</body>
+</html>

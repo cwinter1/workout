@@ -16,6 +16,7 @@ button { font-family: inherit; cursor: pointer; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes rise { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 </style>
+<script src="https://js.puter.com/v2/"></script>
 </head>
 <body>
 <div id="root" style="height:100dvh;display:flex;flex-direction:column;"></div>
@@ -271,6 +272,46 @@ const YT_IDS = {
   'Savasana':          '1VYlOKUdylM',
 };
 
+const COACH_CUES = {
+  STRENGTH: [
+    "Control the movement. Don't rush it.",
+    "Breathe out on the effort.",
+    "Shoulders down, core tight.",
+    "Last rep counts the same as the first.",
+    "Full range. Don't cheat the bottom.",
+    "You're building something. Stay with it.",
+    "Slow down the lowering phase.",
+    "Form first. Intensity is a reward, not a shortcut.",
+  ],
+  POSTURE: [
+    "Feel the stretch before you go deeper.",
+    "Let gravity do the work.",
+    "Chin tucked. Shoulders wide.",
+    "This is the undoing. Let it happen slowly.",
+    "Slow breath into the tight spot.",
+  ],
+  YOGA: [
+    "Breath first, then depth.",
+    "Every exhale, sink a little further.",
+    "Stillness is the practice.",
+    "No forcing. Find the edge and stay there.",
+    "Let the floor hold you completely.",
+  ],
+};
+
+const HOME_PHRASES = [
+  "Thirty-five minutes. The rest of the day is yours.",
+  "The hardest part is starting. You're already here.",
+  "Your future self doesn't care how you felt this morning.",
+  "Three days a week. That's all this asks.",
+  "The desk will wait. The body won't.",
+  "Show up. The results are a side effect.",
+  "You don't negotiate with the morning. You just move.",
+  "Movement is the answer to most of what's wrong.",
+  "This is the one thing today that's entirely for you.",
+  "Four weeks. You're inside it now.",
+];
+
 function phaseSeconds(totalMin) {
   const s = PROGRAM.phaseShare, total = totalMin * 60;
   return {
@@ -335,6 +376,23 @@ state.week = ns.week; state.day = ns.day;
 const SESSION_MIN = 35;
 let timerInterval = null;
 
+let _audioCtx = null;
+function getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (_audioCtx.state === 'suspended') _audioCtx.resume();
+  return _audioCtx;
+}
+
+let _currentAudio = null;
+async function speakCue(text) {
+  try {
+    if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
+    const audio = await puter.ai.txt2speech(text);
+    _currentAudio = audio;
+    audio.play();
+  } catch {}
+}
+
 // ═══════════════════════════════════════════════════════
 // SESSION HISTORY + MEASUREMENTS STORAGE
 // ═══════════════════════════════════════════════════════
@@ -344,6 +402,25 @@ function loadMeasurements()  { try { return JSON.parse(localStorage.getItem('mf.
 function saveMeasurements(m) { try { localStorage.setItem('mf.measurements', JSON.stringify(m)); } catch {} }
 function loadGarmin()        { try { return JSON.parse(localStorage.getItem('mf.garmin') || '[]'); } catch { return []; } }
 function saveGarmin(g)       { try { localStorage.setItem('mf.garmin', JSON.stringify(g)); } catch {} }
+function loadSyncUrl()       { return localStorage.getItem('mf.syncUrl') || ''; }
+function saveSyncUrl(u)      { if (u) localStorage.setItem('mf.syncUrl', u); else localStorage.removeItem('mf.syncUrl'); }
+
+function computePerformanceIndex(sleepScore, workoutRating, calories) {
+  const vals = [sleepScore != null ? sleepScore / 100 : null,
+                workoutRating != null ? workoutRating / 5 : null,
+                calories != null ? Math.min(calories / 500, 1) : null];
+  const weights = [0.4, 0.4, 0.2];
+  let total = 0, wSum = 0;
+  vals.forEach((v, i) => { if (v !== null) { total += v * weights[i]; wSum += weights[i]; } });
+  return wSum > 0 ? Math.round((total / wSum) * 100) : null;
+}
+
+function syncToSheets(payload) {
+  const url = loadSyncUrl();
+  if (!url) return;
+  try { fetch(url, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) }); } catch {}
+}
+
 function dateKey(ts) {
   const d = ts ? new Date(ts) : new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -682,7 +759,12 @@ function renderHome(root) {
   measBtn.onclick = () => { state.view = 'measurements'; render(); };
   bottomLinks.append(progBtn, measBtn);
 
-  pad.append(eyebrow, titleWrap, sleepCard, beginBtn, phaseBreak, weekSection, progGrid, bottomLinks, el('div', `height:40px;`));
+  const phraseCard = el('div', `padding:12px 0;`);
+  const phraseText = el('div', `font-family:"Instrument Serif",serif;font-size:20px;font-style:italic;line-height:1.35;color:${T.sub};`);
+  phraseText.textContent = HOME_PHRASES[Object.keys(state.progress).length % HOME_PHRASES.length];
+  phraseCard.appendChild(phraseText);
+
+  pad.append(eyebrow, titleWrap, phraseCard, sleepCard, beginBtn, phaseBreak, weekSection, progGrid, bottomLinks, el('div', `height:40px;`));
   scroll.appendChild(pad);
   root.appendChild(scroll);
 }
@@ -742,6 +824,7 @@ function renderProgressGrid() {
 // ═══════════════════════════════════════════════════════
 function startSession() {
   clearInterval(timerInterval);
+  getAudioCtx();
   state.timeline = buildTimeline(state.day, state.week, SESSION_MIN);
   state.idx = 0;
   state.left = state.timeline[0].seconds;
@@ -773,6 +856,7 @@ function startTimer() {
         finishSession();
       }
     } else {
+      if (state.left <= 10 && state.left > 0) beepTick(state.left <= 3 ? 880 : 440);
       updateTimerDisplay();
     }
   }, 1000);
@@ -801,6 +885,17 @@ function updateTimerDisplay() {
     const totalSec = state.timeline.reduce((a, t) => a + t.seconds, 0);
     const doneSec = state.timeline.slice(0, state.idx).reduce((a, t) => a + t.seconds, 0) + (cur.seconds - state.left);
     progEl.style.width = `${(doneSec / totalSec) * 100}%`;
+  }
+
+  if (cur.phaseId === 'main') {
+    const tag = PROGRAM.days[state.day].tag;
+    const cues = COACH_CUES[tag] || [];
+    if (cues.length) {
+      const elapsed = cur.seconds - state.left;
+      if (elapsed === 1 || (elapsed > 0 && elapsed % 20 === 0)) {
+        speakCue(cues[Math.floor(elapsed / 20) % cues.length]);
+      }
+    }
   }
 }
 
@@ -1161,6 +1256,28 @@ function renderDone(root) {
   ].forEach(([k, v]) => stats.appendChild(renderStat(k, v)));
   body.appendChild(stats);
 
+  // Workout rating card (1–5)
+  let workoutRating = null;
+  const ratingCard = el('div', `background:${T.card};border:1px solid ${T.hairline};border-radius:8px;padding:14px 16px;`);
+  const ratingHdr = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;`);
+  ratingHdr.textContent = 'How was the session?';
+  const ratingRow = el('div', `display:flex;gap:8px;`);
+  [1,2,3,4,5].forEach(n => {
+    const btn = el('button', `flex:1;appearance:none;border:1px solid ${T.hairline};background:transparent;color:${T.sub};border-radius:6px;padding:10px 0;font-family:${T.display};font-weight:700;font-size:18px;`);
+    btn.textContent = n;
+    btn.onclick = () => {
+      workoutRating = n;
+      ratingRow.querySelectorAll('button').forEach((b, i) => {
+        b.style.background = i + 1 === n ? T.accent : 'transparent';
+        b.style.color = i + 1 === n ? T.accentT : T.sub;
+        b.style.border = `1px solid ${i + 1 === n ? T.accent : T.hairline}`;
+      });
+    };
+    ratingRow.appendChild(btn);
+  });
+  ratingCard.append(ratingHdr, ratingRow);
+  body.appendChild(ratingCard);
+
   // Garmin post-workout card
   const existingPost = loadGarmin().find(g => g.type === 'post' && g.sessionKey === sessionKey) || {};
   const garminCard = el('div', `background:${T.card};border:1px solid ${T.hairline};border-radius:8px;padding:14px 16px;`);
@@ -1243,7 +1360,6 @@ function renderDone(root) {
   const bankBtn = el('button', `flex:2;appearance:none;border:none;background:${T.accent};color:${T.accentT};border-radius:6px;padding:18px 22px;font-family:${T.display};font-weight:700;font-size:16px;text-transform:uppercase;letter-spacing:0.5px;display:flex;align-items:center;justify-content:center;gap:10px;`);
   bankBtn.innerHTML = `${iconCheck(T.accentT)} Bank it`;
   bankBtn.onclick = () => {
-    // save post-workout garmin data
     const cal = parseFloat(calInp.value);
     const ah  = parseInt(ahInp.value);
     const am  = parseInt(amInp.value);
@@ -1256,6 +1372,22 @@ function renderDone(root) {
       garmin.push(entry);
       saveGarmin(garmin);
     }
+    // save rating to session record
+    const sessions = loadSessions();
+    const si = sessions.findIndex(s => s.key === sessionKey);
+    if (si !== -1 && workoutRating != null) { sessions[si].workoutRating = workoutRating; saveSessions(sessions); }
+    // sync to sheets
+    const preG = loadGarmin().find(g => g.type === 'pre' && g.sessionKey === sessionKey) || {};
+    syncToSheets({
+      date: dateKey(), week: state.week, day: state.day,
+      dayTitle: PROGRAM.days[state.day].title, dayTag: PROGRAM.days[state.day].tag,
+      duration: duration,
+      workoutRating: workoutRating,
+      sleepScore: preG.sleepScore ?? null,
+      sleepHours: preG.sleepHours ?? null, sleepMins: preG.sleepMins ?? null,
+      calories: isNaN(cal) ? null : cal,
+      activeHours: isNaN(ah) ? null : ah, activeMins: isNaN(am) ? null : am,
+    });
     const ns2 = nextSession();
     state.week = ns2.week; state.day = ns2.day;
     state.view = 'home';
@@ -1439,6 +1571,20 @@ function renderMeasurements(root) {
     body.appendChild(photoSection);
   }
 
+  // Sheets sync URL card
+  const syncSection = el('div', ``);
+  syncSection.appendChild(sectionHeader('Google Sheets sync'));
+  const syncCard = el('div', `background:${T.card};border:1px solid ${T.hairline};border-radius:8px;padding:14px 16px;`);
+  const syncInp = el('input', `background:transparent;border:none;border-bottom:1px solid ${T.hairline};outline:none;font-size:13px;color:${T.fg};width:100%;padding:4px 0;`);
+  syncInp.type = 'url'; syncInp.placeholder = 'Paste Apps Script /exec URL…';
+  syncInp.value = loadSyncUrl();
+  syncInp.addEventListener('change', () => saveSyncUrl(syncInp.value.trim()));
+  const syncNote = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};margin-top:8px;letter-spacing:0.5px;`);
+  syncNote.textContent = 'After Bank it, session data is sent to your sheet.';
+  syncCard.append(syncInp, syncNote);
+  syncSection.appendChild(syncCard);
+  body.appendChild(syncSection);
+
   scroll.appendChild(body);
   root.append(hdr, scroll);
 }
@@ -1518,7 +1664,7 @@ function renderProgram(root) {
 // ═══════════════════════════════════════════════════════
 function beep() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = getAudioCtx();
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.connect(g); g.connect(ctx.destination);
     o.type = 'sine'; o.frequency.setValueAtTime(660, ctx.currentTime);
@@ -1526,6 +1672,17 @@ function beep() {
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
     o.start(); o.stop(ctx.currentTime + 0.4);
     if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
+  } catch {}
+}
+function beepTick(freq) {
+  try {
+    const ctx = getAudioCtx();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = 'sine'; o.frequency.setValueAtTime(freq, ctx.currentTime);
+    g.gain.setValueAtTime(0.15, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+    o.start(); o.stop(ctx.currentTime + 0.12);
   } catch {}
 }
 
