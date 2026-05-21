@@ -824,7 +824,15 @@ function renderProgressGrid() {
 // ═══════════════════════════════════════════════════════
 function startSession() {
   clearInterval(timerInterval);
-  getAudioCtx();
+  // iOS unlock: play a silent 1-sample buffer synchronously inside the tap handler
+  try {
+    const ctx = getAudioCtx();
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+  } catch {}
   state.timeline = buildTimeline(state.day, state.week, SESSION_MIN);
   state.idx = 0;
   state.left = state.timeline[0].seconds;
@@ -1662,27 +1670,31 @@ function renderProgram(root) {
 // ═══════════════════════════════════════════════════════
 // SOUND
 // ═══════════════════════════════════════════════════════
-function beep() {
+async function beep() {
   try {
     const ctx = getAudioCtx();
+    if (ctx.state !== 'running') await ctx.resume();
+    const t = ctx.currentTime + 0.05;
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.connect(g); g.connect(ctx.destination);
-    o.type = 'sine'; o.frequency.setValueAtTime(660, ctx.currentTime);
-    g.gain.setValueAtTime(0.3, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-    o.start(); o.stop(ctx.currentTime + 0.4);
+    o.type = 'sine'; o.frequency.setValueAtTime(660, t);
+    g.gain.setValueAtTime(0.3, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    o.start(t); o.stop(t + 0.4);
     if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
   } catch {}
 }
-function beepTick(freq) {
+async function beepTick(freq) {
   try {
     const ctx = getAudioCtx();
+    if (ctx.state !== 'running') await ctx.resume();
+    const t = ctx.currentTime + 0.05;
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.connect(g); g.connect(ctx.destination);
-    o.type = 'sine'; o.frequency.setValueAtTime(freq, ctx.currentTime);
-    g.gain.setValueAtTime(0.15, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-    o.start(); o.stop(ctx.currentTime + 0.12);
+    o.type = 'sine'; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.15, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    o.start(t); o.stop(t + 0.17);
   } catch {}
 }
 
