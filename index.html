@@ -377,6 +377,22 @@ const SESSION_MIN = 35;
 let timerInterval = null;
 
 let _audioCtx = null;
+let _wakeLock = null;
+async function acquireWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      _wakeLock = await navigator.wakeLock.request('screen');
+      _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+    }
+  } catch {}
+}
+function releaseWakeLock() {
+  try { if (_wakeLock) { _wakeLock.release(); _wakeLock = null; } } catch {}
+}
+// Re-acquire if page becomes visible again (iOS tab switch)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && (state.view === 'session' || state.view === 'meditation')) acquireWakeLock();
+});
 function getAudioCtx() {
   if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (_audioCtx.state === 'suspended') _audioCtx.resume();
@@ -839,6 +855,7 @@ function startSession() {
   state.paused = false;
   state.startedAt = Date.now();
   state.view = 'preview';
+  acquireWakeLock();
   render();
 }
 
@@ -1210,6 +1227,7 @@ function skipExercise() {
 
 function abortSession() {
   clearInterval(timerInterval);
+  releaseWakeLock();
   const ns2 = nextSession();
   state.week = ns2.week; state.day = ns2.day;
   state.view = 'home';
@@ -1218,6 +1236,7 @@ function abortSession() {
 
 function finishSession() {
   clearInterval(timerInterval);
+  releaseWakeLock();
   const key = `w${state.week}d${state.day}`;
   const now = Date.now();
   const duration = state.startedAt ? Math.round((now - state.startedAt) / 1000) : SESSION_MIN * 60;
