@@ -123,7 +123,7 @@ const PROGRAM = {
         { id:'warmup', name:'Warm-up', intent:'Gentle activation.', exercises:[
           { name:'Scapular CARs', variants:['5 each direction','6 each','8 each · slow','10 each · slow'] },
           { name:'Wall Slide',    variants:['10 reps','12 reps','15 reps','15 reps · band'] },
-          { name:'March in Place',variants:['40 sec','45 sec','50 sec','60 sec · arms'] },
+          { name:'Inchworm',       variants:['4 reps slow','5 reps · pause at plank','6 reps + push-up at bottom','8 reps + push-up at bottom'] },
         ]},
         { id:'main', name:'Main Set', intent:'3 rounds. Posture under load.', exercises:[
           { name:'Band Pull-Apart',variants:['15 reps · light','20 reps · light','15 reps · medium','20 reps · medium'] },
@@ -198,7 +198,7 @@ const EX_INFO = {
   'Doorway Pec':       { desc:'Stand in a doorway, arms at 90°. Lean forward until you feel a stretch across your chest. Hold and breathe deeply into the stretch.', gif:'doorway chest stretch pec stretch' },
   'Scapular CARs':     { desc:'Controlled articular rotations of the shoulder blade. Protract, elevate, retract, and depress in a full circle. Move slowly and intentionally.', gif:'scapular rotation exercise shoulder' },
   'Wall Slide':        { desc:'Stand with your back against a wall, arms in a goalpost position. Slide your arms overhead while keeping contact with the wall throughout.', gif:'wall slide exercise shoulder posture' },
-  'March in Place':    { desc:'Lift alternating knees to hip height with a slight arm swing. Gentle cardio activation — focus on posture and breathing, not speed.', gif:'marching in place exercise warm up' },
+  'Inchworm':          { desc:'Stand tall, hinge forward and walk your hands out to a plank. Pause, then walk your feet toward your hands and stand. Full-body activation — targets hamstrings, shoulders, and core with control.', gif:'inchworm exercise warm up mobility' },
   'Band Pull-Apart':   { desc:'Hold a resistance band at shoulder height. Pull it apart by squeezing your shoulder blades together. Control the return. Targets rear deltoids and rhomboids.', gif:'band pull apart exercise posture' },
   'Y-T-W on Floor':    { desc:'Lie face down. Raise arms into a Y, then T, then W shape — each targets different muscles of the upper back and rotator cuff. Lift only as high as you can without pain.', gif:'YTW exercise upper back floor' },
   'Wall Angels':       { desc:'Stand with your back flat against a wall, arms in a goalpost shape. Slowly raise your arms overhead while maintaining full contact with the wall.', gif:'wall angels exercise posture' },
@@ -249,7 +249,7 @@ const YT_IDS = {
   'Doorway Pec':       'qv6el4OhHjA',
   'Scapular CARs':     'j9fWLr1KxFA',
   'Wall Slide':        'yOtlRQxwt3g',
-  'March in Place':    'QilgMPG7OaA',
+  'Inchworm':          'g_9VhPX5HJA',
   'Band Pull-Apart':   'mCDy-WsNKcs',
   'Y-T-W on Floor':    'jV6TKLnA1EQ',
   'Wall Angels':       '1UU4VvklQ44',
@@ -338,6 +338,10 @@ function buildTimeline(dayIdx, week, totalMin) {
     ph.exercises.forEach((ex, ei) => {
       out.push({ phaseIdx:pi, phaseId:ph.id, phaseName:ph.name, intent:ph.intent,
         exIdx:ei, exName:ex.name, variant:ex.variants[week-1], seconds:each, kind:'exercise' });
+      if (ph.id === 'main' && ei < ph.exercises.length - 1) {
+        out.push({ phaseIdx:pi, phaseId:ph.id, phaseName:ph.name, intent:'',
+          exIdx:-1, exName:'Rest', variant:'', seconds:30, kind:'rest' });
+      }
     });
   });
   return out;
@@ -875,8 +879,14 @@ function startTimer() {
       if (state.idx + 1 < state.timeline.length) {
         state.idx++;
         state.left = state.timeline[state.idx].seconds;
-        state.view = 'preview';
-        render();
+        if (state.timeline[state.idx].kind === 'rest') {
+          state.view = 'session';
+          render();
+          startTimer();
+        } else {
+          state.view = 'preview';
+          render();
+        }
       } else {
         finishSession();
       }
@@ -912,7 +922,7 @@ function updateTimerDisplay() {
     progEl.style.width = `${(doneSec / totalSec) * 100}%`;
   }
 
-  if (cur.phaseId === 'main') {
+  if (cur.phaseId === 'main' && cur.kind !== 'rest') {
     const tag = PROGRAM.days[state.day].tag;
     const cues = COACH_CUES[tag] || [];
     if (cues.length) {
@@ -1086,6 +1096,7 @@ function renderSession(root) {
   const doneSec = state.timeline.slice(0, state.idx).reduce((a, t) => a + t.seconds, 0);
 
   if (cur.kind === 'meditation') { renderMeditation(root); return; }
+  if (cur.kind === 'rest') { renderRest(root); return; }
 
   const hdr = el('div', `padding:calc(env(safe-area-inset-top,12px) + 12px) 22px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;`);
   const closeBtn = el('button', `appearance:none;border:1px solid ${T.hairline};background:transparent;color:${T.fg};width:36px;height:36px;border-radius:6px;display:flex;align-items:center;justify-content:center;`);
@@ -1148,6 +1159,59 @@ function renderSession(root) {
 
   body.append(phaseTag, exTitle, variant, timerCard, progWrap);
 
+  root.append(hdr, phaseBars, body, renderControls());
+}
+
+// ═══════════════════════════════════════════════════════
+// REST
+// ═══════════════════════════════════════════════════════
+function renderRest(root) {
+  const cur = state.timeline[state.idx];
+  const day_ = PROGRAM.days[state.day];
+  const totalSec = state.timeline.reduce((a, t) => a + t.seconds, 0);
+  const doneSec = state.timeline.slice(0, state.idx).reduce((a, t) => a + t.seconds, 0);
+  const nextEx = state.timeline[state.idx + 1];
+
+  const hdr = el('div', `padding:calc(env(safe-area-inset-top,12px)+12px) 22px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;`);
+  const closeBtn = el('button', `appearance:none;border:1px solid ${T.hairline};background:transparent;color:${T.fg};width:36px;height:36px;border-radius:6px;display:flex;align-items:center;justify-content:center;`);
+  closeBtn.innerHTML = iconClose(T.fg);
+  closeBtn.onclick = abortSession;
+  const hdrMid = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:2px;`);
+  hdrMid.textContent = `W${state.week}·D${state.day+1} — ${cur.phaseName}`;
+  hdr.append(closeBtn, hdrMid, el('div', `width:36px;`));
+
+  const phaseBars = el('div', `padding:0 22px;display:flex;gap:4px;flex-shrink:0;`);
+  day_.phases.forEach((ph, i) => {
+    const col = el('div', `flex:1;display:flex;flex-direction:column;gap:4px;`);
+    const bar = el('div', `height:3px;background:${i <= cur.phaseIdx ? T.accent : T.pill};`);
+    const lbl = el('div', `font-family:${T.mono_ff};font-size:9px;color:${i === cur.phaseIdx ? T.fg : T.mono};letter-spacing:1px;text-transform:uppercase;`);
+    lbl.textContent = ph.name.split(' ')[0];
+    col.append(bar, lbl);
+    phaseBars.appendChild(col);
+  });
+
+  const body = el('div', `flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:22px;gap:24px;`);
+
+  const restLabel = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.accent};letter-spacing:3px;text-transform:uppercase;`);
+  restLabel.textContent = 'Rest';
+
+  const timerNum = el('div', `font-family:${T.mono_ff};font-size:96px;font-weight:500;color:${T.fg};letter-spacing:-4px;line-height:1;font-variant-numeric:tabular-nums;`);
+  timerNum.id = 'timer-num';
+  timerNum.textContent = fmt(state.left);
+
+  const nextWrap = el('div', `text-align:center;`);
+  const nextLbl = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:1.5px;text-transform:uppercase;`);
+  nextLbl.textContent = 'Up next';
+  const nextName = el('div', `font-family:${T.display};font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:0.5px;color:${T.fg};margin-top:4px;`);
+  nextName.textContent = nextEx?.exName || 'Complete';
+  nextWrap.append(nextLbl, nextName);
+
+  const progBg = el('div', `width:100%;height:4px;background:${T.pill};border-radius:2px;`);
+  const progFill = el('div', `height:100%;width:${(doneSec/totalSec)*100}%;background:${T.accent};`);
+  progFill.id = 'session-prog';
+  progBg.appendChild(progFill);
+
+  body.append(restLabel, timerNum, nextWrap, progBg);
   root.append(hdr, phaseBars, body, renderControls());
 }
 
