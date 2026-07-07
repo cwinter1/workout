@@ -14,7 +14,7 @@ The app title is in Hebrew: **Morning Flow · כריס** (כריס = Chris). Lay
 
 ## Non-Negotiable Constraints
 
-- Single `index.html` — no split files, no framework, no build step
+- Plain multi-file static site — no framework, no build step, no bundler. Splitting into multiple files is allowed (see "File Structure" below) as long as every file is loaded via plain `<script src="...">` (classic scripts, not ES modules) so it still works when opened directly via `file://`.
 - iOS Safari only — every layout and API decision must work on iPhone
 - `localStorage` only — no backend, no sync, no account
 - No emojis anywhere
@@ -23,18 +23,40 @@ The app title is in Hebrew: **Morning Flow · כריס** (כריס = Chris). Lay
 
 ---
 
+## File Structure
+
+As of the Office program addition, this is a 5-file static site, not a single `index.html`:
+
+| File | Contents |
+|------|----------|
+| `index.html` | Thin shell — head boilerplate + `<script src="shared.js">` + `<script src="am.js">` |
+| `office.html` | Thin shell — head boilerplate + `<script src="shared.js">` + `<script src="office.js">` |
+| `shared.js` | Engine shared by both programs: palette (`T`), `el()`/icons, `EX_INFO`/`YT_IDS`, audio/haptic, wake lock, all `mf.*` localStorage helpers, `getStreak()`, `captureProgressPhoto()`, `shareWorkout()`, generic `renderWeekSection()`/`renderProgressGrid()`, the whole session engine (`startSession`/`startTimer`/`updateTimerDisplay`/`skipExercise`/`abortSession`/`finishSession`), and the shared render functions (`renderPreview`/`renderSession`/`renderRest`/`renderMeditation`/`renderControls`/`renderDone`) |
+| `am.js` | AM-program-only: `PROGRAM` data, `COACH_CUES`, `HOME_PHRASES`, `pickMessage()`, `renderHome()`/`renderPhaseChips()`/`renderProgram()`/`renderMeasurements()`, its own `state`/`render()`/`nextSession()`/`currentDay()` |
+| `office.js` | Office-program-only: `OFFICE_PROGRAM` data, `OFFICE_PHRASES`, `pickOfficeMessage()`, `renderHome()`/`renderOfficeBreakdown()`, its own `state`/`render()`/`nextSession()`/`currentDay()` |
+
+**Why this shape, not ES modules or a bundler:** `index.html` and `office.html` are two independent pages linked by plain `<a>`/`window.location` navigation (a real page load, not an in-app view switch) — see `memory/architecture_decisions.md` for the full reasoning and the "contract" functions (`currentDay()`, `nextSession()`, `buildSessionTimeline()`, `pickDoneMessage()`, `PROGRESS_PREFIX`, `TOTAL_SESSIONS`) each page-specific file must define before `shared.js`'s generic engine functions are called.
+
+**Editing rule:** touching AM-only content → edit `am.js`. Touching Office-only content → edit `office.js`. Touching the timer/session/done-screen engine, Garmin/measurements storage, or anything both programs use → edit `shared.js`. Don't reintroduce inline `<script>` blocks in either `.html` file — keep them as thin shells.
+
+---
+
 ## Working File & Git Sync
 
-**Working file**: `c:\Users\crist\Downloads\index.html` (edited here, tested locally in mobile Safari via file sharing)
+**Working files**: `c:\Users\crist\Downloads\{index.html, office.html, shared.js, am.js, office.js}` (edited here, tested locally in mobile Safari via file sharing — all 5 files must be present in the same folder since they reference each other by relative path)
 **Repo**: `c:\Users\crist\Downloads\workout-repo\`
 **Live URL**: https://cwinter1.github.io/workout/
 
-Before every commit, sync:
+Before every commit, sync all 5 files:
 ```
-cp "c:/Users/crist/Downloads/index.html" "c:/Users/crist/Downloads/workout-repo/index.html"
+cp "c:/Users/crist/Downloads/index.html"  "c:/Users/crist/Downloads/workout-repo/index.html"
+cp "c:/Users/crist/Downloads/office.html" "c:/Users/crist/Downloads/workout-repo/office.html"
+cp "c:/Users/crist/Downloads/shared.js"   "c:/Users/crist/Downloads/workout-repo/shared.js"
+cp "c:/Users/crist/Downloads/am.js"       "c:/Users/crist/Downloads/workout-repo/am.js"
+cp "c:/Users/crist/Downloads/office.js"   "c:/Users/crist/Downloads/workout-repo/office.js"
 ```
 
-Never edit `workout-repo/index.html` directly. Always sync from Downloads first.
+Never edit the `workout-repo/` copies directly. Always sync from Downloads first.
 
 ### Git workflow (non-negotiable)
 ```
@@ -104,14 +126,16 @@ render()
 
 View transitions: set `state.view`, then call `render()`.
 
-### Utility functions (~line 46)
+### Utility functions (`shared.js` ~line 20)
 - `el(tag, cssText)` — creates an element with inline style
 - `sectionHeader(text)` — JetBrains Mono uppercase chip label
 - `renderStat(key, val)` — key/value row card used in session stats
 - `fmt(seconds)` — formats seconds as `M:SS`
 
-### Icon functions (~line 69)
+### Icon functions (`shared.js` ~line 45)
 All inline SVG. `iconPlay`, `iconPause`, `iconNext`, `iconCheck`, `iconClose`, `iconArrow` — each takes a color string.
+
+Note: this "Architecture" section (and the State/Program Data/Key Constants/Key Functions sections below it) describes the AM program specifically. See `memory/architecture_decisions.md` for how the Office program (`office.html`/`office.js`) mirrors this same structure with its own data and its own copies of `state`/`render()`/`nextSession()`/`currentDay()`.
 
 ---
 
@@ -134,11 +158,11 @@ let state = {
 
 `state.progress` is loaded from `mf.progress` on boot. `nextSession()` scans it and auto-advances `state.week` and `state.day` to the first incomplete session. If all 12 are done, it defaults to W4D3.
 
-`state.progress` key format: `w${week}d${day}` — e.g. `w2d1`.
+`state.progress` key format: `w${week}d${day}` — e.g. `w2d1`. This is the AM program's own `state`, declared in `am.js`; the Office program (`office.js`) declares its own separate `state` object but both read/write the *same* `mf.progress` localStorage object, disambiguated by key prefix (`w` vs `o`) — see `memory/data_shapes.md`.
 
 ---
 
-## Program Data (~line 79)
+## Program Data (`am.js` ~line 4)
 
 `PROGRAM.days[0/1/2]` — 3 day types, each repeated 4 times across the program.
 
@@ -247,48 +271,53 @@ Phase time allocation: `SESSION_MIN = 35`. Proportional via `PROGRAM.phaseShare`
 
 | Constant | Location | Description |
 |----------|----------|-------------|
-| `T` | ~line 27 | Palette + font family refs |
-| `PROGRAM` | ~line 79 | Full 3-day × 4-week program data |
-| `EX_INFO` | ~line 179 | 41 exercises → `{ desc, gif }`. `desc` is a 1–2 sentence plain-language cue. `gif` is a search query string for a YouTube thumbnail search. |
-| `YT_IDS` | ~line 230 | 41 exercises → hardcoded YouTube video ID |
-| `SESSION_MIN` | ~line 335 | `35` — total session minutes |
+| `T` | `shared.js` ~line 4 | Palette + font family refs |
+| `PROGRAM` | `am.js` ~line 4 | Full 3-day × 4-week program data |
+| `EX_INFO` | `shared.js` ~line 60 | ~45 exercises → `{ desc, gif }`, shared by both programs. `desc` is a 1–2 sentence plain-language cue. `gif` is a search query string for a YouTube thumbnail search. |
+| `YT_IDS` | `shared.js` ~line 143 | Same exercise set → hardcoded YouTube video ID |
+| `SESSION_MIN` | `am.js` ~line 179 | `35` — AM program session minutes |
+| `OFFICE_PROGRAM` | `office.js` ~line 4 | Office program data — 4-week × 2-day/week isometric circuit |
 
-`getExInfo(name)` (~line 223) looks up `EX_INFO[name]`, with a fallback for unknown exercises.
+`getExInfo(name)` (`shared.js` ~line 111) looks up `EX_INFO[name]`, with a fallback for unknown exercises.
 
 ---
 
 ## Key Functions
 
-### Session lifecycle (~line 743)
-1. `startSession()` — builds `state.timeline` via `buildTimeline()`, sets `state.startedAt = Date.now()`, sets view to `preview`
-2. `startTimer()` (~line 759) — 1-second interval; on expiry: `beep()`, advance `state.idx`, show next preview, or call `finishSession()`
-3. `updateTimerDisplay()` (~line 781) — partial DOM updates during session (no full re-render); updates `#timer-num`, `#med-countdown`, `#med-box`, progress bar
-4. `finishSession()` (~line 1096) — saves `mf.progress` + `mf.sessions` record, sets `state.lastDuration`, sets view to `done`
-5. `abortSession()` (~line 1088) — clears timer, calls `nextSession()` to re-advance, goes home
-6. `pickDay(w, d)` (~line 754) — sets `state.week/day`, immediately starts session (used from week chips and progress grid taps)
+All session-engine functions below live in `shared.js` and are generic across both programs — they call page-specific "contract" functions (`currentDay()`, `nextSession()`, `buildSessionTimeline()`, `pickDoneMessage()`) that `am.js`/`office.js` each define. See `memory/architecture_decisions.md` for the full contract.
 
-### Box breathing (~line 807)
-`getMedState()` — parses the variant string (e.g. `'5·5·5·5'`) to extract 4 phase durations (inhale/hold/exhale/hold). Computes current phase and scale for the animated breathing box (0.55→1.0 on inhale, 1.0 on hold, 1.0→0.55 on exhale). Called every tick via `updateTimerDisplay()`.
+### Session lifecycle (`shared.js` ~line 496)
+1. `startSession()` — builds `state.timeline` via `buildSessionTimeline()` (page-specific), sets `state.startedAt = Date.now()`, sets view to `preview`
+2. `startTimer()` (~line 517) — 1-second interval; on expiry: `beep()`, advance `state.idx`, show next preview, or call `finishSession()`
+3. `updateTimerDisplay()` (~line 546) — partial DOM updates during session (no full re-render); updates `#timer-num`, `#med-countdown`, `#med-box`, progress bar
+4. `finishSession()` (~line 625) — saves `mf.progress` + `mf.sessions` record (keyed by page-specific `PROGRESS_PREFIX`), sets `state.lastDuration`, sets view to `done`
+5. `abortSession()` (~line 616) — clears timer, calls `nextSession()` (page-specific) to re-advance, goes home
+6. `pickDay(w, d)` — page-specific (`am.js` ~line 421, `office.js` ~line 206) — sets `state.week/day`, immediately starts session (used from week chips and progress grid taps)
 
-### Streak & session history (~line 352)
-`getStreak()` — loads `mf.sessions`, extracts unique calendar days, counts consecutive days ending today. Returns 0 if the last session wasn't today or yesterday.
+### Box breathing (`shared.js` ~line 583)
+`getMedState()` — parses the variant string (e.g. `'5·5·5·5'`) to extract 4 phase durations (inhale/hold/exhale/hold). Computes current phase and scale for the animated breathing box (0.55→1.0 on inhale, 1.0 on hold, 1.0→0.55 on exhale). Called every tick via `updateTimerDisplay()`. Only ever exercised by the AM program — Office's timeline has no `kind:'meditation'` items.
 
-### Message system (~line 374)
-`pickMessage(streak, week, dayTag, total)` — priority order:
+### Streak & session history (`shared.js` ~line 285)
+`getStreak()` — loads `mf.sessions` (both AM and Office records, shared array), extracts unique calendar days, counts consecutive days ending today. Returns 0 if the last session wasn't today or yesterday.
+
+### Message system
+`am.js`'s `pickMessage(streak, week, dayTag, total)` (~line 212) — priority order:
 1. Total session milestones: 1st session, 12th session (program complete)
 2. Streak milestones: 2/3/5/7/10/14/21 consecutive days
 3. Week + day-type combos: 12 specific messages (one per W1–4 × STRENGTH/POSTURE/YOGA)
 4. General pool: 14 rotating messages based on `total % pool.length`
 
+`office.js`'s `pickOfficeMessage(streak, week, total)` (~line 102) follows the same milestone/streak/pool structure but without the day-type combo tier (Office has no day-type variation). Both are wrapped by a page-local `pickDoneMessage(streak, week, total)` that `shared.js`'s `renderDone()`/`shareWorkout()` call by that fixed name.
+
 Tone: dry delivery, genuine warmth. Short sentences. No exclamation marks. No superlatives. Acknowledge the real thing.
 
-### Progress photo (~line 424)
+### Progress photo (`shared.js` ~line 307)
 `captureProgressPhoto(sessionKey)` — opens front camera via `<input type="file" capture="user">`. Crops square from center, produces 240×240 JPEG thumbnail (~15KB) stored in `sessions[n].photo`. Full-res image sent to camera roll via `navigator.share({ files: [file] })`.
 
-### Share card (~line 468)
-`shareWorkout(streak, total, duration)` — draws 1080×1080 Canvas PNG: dark background, workout title (accent second word), W·D·min meta, streak number in 140px Space Grotesk, encouragement quote in 34px Instrument Serif italic, footer with date + `cwinter1.github.io/workout`. Requires `await document.fonts.ready` before any Canvas text.
+### Share card (`shared.js` ~line 351)
+`shareWorkout(streak, total, duration)` — draws 1080×1080 Canvas PNG: dark background, workout title (accent second word), W·D·min meta, streak number in 140px Space Grotesk, encouragement quote in 34px Instrument Serif italic, footer with date + `cwinter1.github.io/workout`. Requires `await document.fonts.ready` before any Canvas text. Generic — pulls the title from `currentDay()` and the quote from `pickDoneMessage()`, both page-specific.
 
-### Audio/haptic (~line 1519)
+### Audio/haptic (`shared.js` ~line 189)
 `beep()` — Web Audio API sine wave at 660Hz for 0.4s + `navigator.vibrate([60,30,60])`. Called on exercise transition.
 
 ---
@@ -394,7 +423,7 @@ Pattern: `padding-top:56.25%` outer div (CSS background = YouTube thumbnail) →
 { at: timestamp, weight: 80.5, waist: 90, hips: 100, hr: 62, energy: 3 }
 ```
 
-### Helpers (~line 341)
+### Helpers (`shared.js` ~line 250)
 `loadSessions / saveSessions / loadMeasurements / saveMeasurements / loadGarmin / saveGarmin` — all wrap localStorage with try/catch. `dateKey(ts?)` returns `YYYY-MM-DD`.
 
 ### Garmin upsert pattern (pre entry)
@@ -442,8 +471,9 @@ Files:
 
 ## What NOT to Do
 
-- Don't add a framework or build step
-- Don't split into multiple files
+- Don't add a framework, bundler, or build step
+- Don't use ES modules (`type="module"`/`import`/`export`) — classic `<script src>` only, so the site still works opened directly via `file://`
+- Don't put programlogy content (`am.js`/`office.js` specifics like `PROGRAM`/`OFFICE_PROGRAM`, `COACH_CUES`, message pools) into `shared.js` — it should stay generic and reusable by both programs
 - Don't use `aspect-ratio:16/9` on iframes — use the padding-top container trick
 - Don't connect the Garmin API — manual entry only by design
 - Don't add emojis

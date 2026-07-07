@@ -16,7 +16,7 @@ User selected "Tone C" from three options.
 **Why:** User preference. Consistent with the B·Restore design system.
 
 ## No `input()` calls
-**Why:** Breaks the single-file PWA pattern; not applicable to browser JS anyway.
+**Why:** Not applicable to browser JS anyway.
 
 ## No Garmin API
 **Why:** User explicitly chose manual entry. Simple concrete fields only. The API route would require OAuth, a server, and complexity that serves no purpose for a personal single-device app.
@@ -51,9 +51,12 @@ Fonts (all loaded from Google Fonts):
 - `Instrument Serif` — italic quote text (encouragement messages)
 
 ## Office program: confirmed decisions
-Built as a second mode reached via a nav link ("Office · Core Reset" button on the AM home screen, same style as "4-week program"/"Measurements"), not a replacement for the AM program and not a separate app.
+Reached via a nav link ("Office · Core Reset" button on the AM home screen, same style as "4-week program"/"Measurements") that does a **real page navigation** to `office.html` — not a replacement for the AM program, not an in-app view switch, not a separate installable app.
 
-**Revised after first delivery:** the first version put a Home/Office toggle at the top of the home screen that re-rendered the whole screen in place. User explicitly rejected this — "morning routine should keep as is, just add a link/button" to navigate to Office as its own screen (`officeHome` view, with its own back button). The AM home screen must never be touched by Office-mode logic again.
+**Two revisions before this landed:**
+1. First version: a Home/Office toggle at the top of the home screen that re-rendered the whole screen in place. User rejected — "morning routine should keep as is, just add a link/button" to navigate to Office as its own screen.
+2. Second version: kept it as one file, replaced the toggle with a nav-link button to an in-app `officeHome` view (own back button, AM home screen untouched). User then asked for genuine architectural separation ("thinking more as an architectural perspective, not user flow... I have used this repo already 3 times") — confirmed via `AskUserQuestion`: (a) real separate HTML files linked by navigation, not just more `<script>` files under one page, and (b) link-only, no separate "Add to Home Screen" entry for Office.
+3. Current version: `index.html`/`am.js` (AM) + `office.html`/`office.js` (Office) + `shared.js` (engine both use). See `memory/architecture_decisions.md` for the full "contract" pattern. **The AM home screen (`am.js`'s `renderHome`) must never be touched by Office-specific logic — that boundary is now enforced by the file split itself, not just convention.**
 
 - One exercise sequence repeated every session (not alternating day types) — Plank, Wall Sit, Dead Bug Hold, Glute Bridge Hold, Farmer Carry Hold.
 - Hold time uniform across all 5 exercises, same value every exercise: 30/40/50/60 sec across weeks 1–4.

@@ -17,19 +17,20 @@ metadata:
 ## Session record
 ```javascript
 {
-  key: 'w1d0',           // 'w' prefix = Home/AM program, 'o' prefix = Office program (e.g. 'o1d0')
+  key: 'w1d0',           // 'w' prefix = AM program (am.js), 'o' prefix = Office program (office.js), e.g. 'o1d0'
   at: timestamp,
   duration: seconds,
   week: 1,               // 1–4
   day: 0,                // AM: 0–2. Office: 0–1
-  dayTitle: 'Strength · Mobility',
+  dayTitle: 'Strength · Mobility',  // Office sessions: 'Office · Core Reset'
   dayTag: 'STRENGTH',    // Office sessions use 'OFFICE'
-  mode: 'home',          // 'home' or 'office' — added for the Office program
   photo: 'data:image/jpeg;base64,...',  // 240×240 thumbnail, optional
 }
 ```
 
-`mf.progress` keys are prefixed by mode: `w{week}d{day}` for the AM program (12 total), `o{week}d{day}` for Office (8 total). Both share the same `mf.progress` object and the same `mf.sessions` array — no separate storage keys were introduced. `state.mode` ('home' | 'office') is a runtime-only field (not persisted); it's recomputed via `nextSession()`/`nextOfficeSession()` whenever the mode toggle is switched or the app boots.
+There is no `mode` field — the `key` prefix alone disambiguates which program a record belongs to (AM's `finishSession()` in `shared.js` builds the key from `am.js`'s `PROGRESS_PREFIX = 'w'`; Office's from `office.js`'s `PROGRESS_PREFIX = 'o'`).
+
+`mf.progress` keys are prefixed the same way: `w{week}d{day}` for the AM program (12 total, `am.js`'s `TOTAL_SESSIONS`), `o{week}d{day}` for Office (8 total, `office.js`'s `TOTAL_SESSIONS`). Both `index.html` (`am.js`) and `office.html` (`office.js`) read/write the *same* `mf.progress` object and `mf.sessions` array — they are two separate pages with two separate in-memory `state` objects, connected only through this shared `localStorage` (same origin, same keys). There is no `state.mode` anymore — that was an artifact of an earlier single-file version; each page now only ever deals with its own program.
 
 ## Garmin entry shapes
 ```javascript
