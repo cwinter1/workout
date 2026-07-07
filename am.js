@@ -408,10 +408,13 @@ function renderHome(root) {
   const officeBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
   officeBtn.innerHTML = `<span>Office · Core Reset</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
   officeBtn.onclick = () => { window.location.href = 'office.html'; };
+  const qflowBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
+  qflowBtn.innerHTML = `<span>Q·Flow</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
+  qflowBtn.onclick = () => { window.location.href = 'https://cwinter1.github.io/workflow-Qigong/'; };
   const measBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
   measBtn.innerHTML = `<span>Measurements</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
   measBtn.onclick = () => { state.view = 'measurements'; render(); };
-  bottomLinks.append(progBtn, officeBtn, measBtn);
+  bottomLinks.append(progBtn, officeBtn, qflowBtn, measBtn);
 
   const phraseCard = el('div', `padding:12px 0;`);
   const phraseText = el('div', `font-family:"Instrument Serif",serif;font-size:20px;font-style:italic;line-height:1.35;color:${T.sub};`);
