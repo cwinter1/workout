@@ -785,6 +785,7 @@ function render() {
   root.style.cssText = `height:100dvh;display:flex;flex-direction:column;background:${T.bg};color:${T.fg};font-family:${T.body};-webkit-font-smoothing:antialiased;overflow:hidden;animation:rise .25s ease;`;
 
   if (state.view === 'home')            renderHome(root);
+  else if (state.view === 'officeHome') renderOfficeHome(root);
   else if (state.view === 'preview')    renderPreview(root);
   else if (state.view === 'session')    renderSession(root);
   else if (state.view === 'done')       renderDone(root);
@@ -795,24 +796,6 @@ function render() {
 // ═══════════════════════════════════════════════════════
 // HOME
 // ═══════════════════════════════════════════════════════
-function renderModeToggle() {
-  const wrap = el('div', `display:flex;gap:4px;background:${T.pill};padding:4px;border-radius:8px;`);
-  [['home', 'Home'], ['office', 'Office']].forEach(([key, label]) => {
-    const active = state.mode === key;
-    const btn = el('button', `flex:1;appearance:none;border:none;background:${active ? T.accent : 'transparent'};color:${active ? T.accentT : T.mono};border-radius:6px;padding:10px 0;font-family:${T.mono_ff};font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;`);
-    btn.textContent = label;
-    btn.onclick = () => {
-      if (state.mode === key) return;
-      state.mode = key;
-      const ns2 = key === 'office' ? nextOfficeSession() : nextSession();
-      state.week = ns2.week; state.day = ns2.day;
-      render();
-    };
-    wrap.appendChild(btn);
-  });
-  return wrap;
-}
-
 function renderWeekSection(count, prefix, pickFn, tagForIndex) {
   const weekSection = el('div', ``);
   weekSection.appendChild(sectionHeader('This week'));
@@ -852,17 +835,14 @@ function renderOfficeBreakdown(week) {
 }
 
 function renderHome(root) {
-  const isOffice = state.mode === 'office';
-  const day = currentDay();
-  const totalMax = modeTotal();
-  const totalDone = modeDoneCount();
-  const sessionSeconds = isOffice ? officeSessionSeconds(state.week) : SESSION_MIN * 60;
-  const sessionMinutes = Math.round(sessionSeconds / 60);
+  const day = PROGRAM.days[state.day];
+  const totalMax = 12;
+  const totalDone = Object.keys(state.progress).filter(k => k.startsWith('w')).length;
+  const sessionSeconds = SESSION_MIN * 60;
+  const sessionMinutes = SESSION_MIN;
 
   const scroll = el('div', `flex:1;overflow-y:auto;padding-top:calc(env(safe-area-inset-top,12px) + 16px);`);
   const pad = el('div', `padding:0 22px;display:flex;flex-direction:column;gap:22px;`);
-
-  const modeToggle = renderModeToggle();
 
   // numeric eyebrow
   const eyebrow = el('div', `display:flex;align-items:baseline;gap:14px;`);
@@ -952,41 +932,106 @@ function renderHome(root) {
   beginBtn.append(beginL, beginR);
   beginBtn.onclick = startSession;
 
-  // phase / session breakdown
-  const phaseBreak = isOffice ? renderOfficeBreakdown(state.week) : renderPhaseChips(day);
+  // phase breakdown
+  const phaseBreak = renderPhaseChips(day);
 
   // This week
-  const weekSection = isOffice
-    ? renderWeekSection(OFFICE_PROGRAM.daysPerWeek, 'o', pickOfficeDay, () => 'OFFICE')
-    : renderWeekSection(3, 'w', pickDay, d2 => PROGRAM.days[d2].tag);
+  const weekSection = renderWeekSection(3, 'w', pickDay, d2 => PROGRAM.days[d2].tag);
 
-  // progress grid
-  const progGrid = isOffice
-    ? renderProgressGrid(OFFICE_PROGRAM.weeks, OFFICE_PROGRAM.daysPerWeek, 'o', pickOfficeDay)
-    : renderProgressGrid(4, 3, 'w', pickDay);
+  // 4-week progress grid
+  const progGrid = renderProgressGrid(4, 3, 'w', pickDay);
 
-  // Full program link + measurements link
+  // Full program link + office link + measurements link
   const bottomLinks = el('div', `display:flex;flex-direction:column;gap:8px;`);
-  if (!isOffice) {
-    const progBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
-    progBtn.innerHTML = `<span>4-week program</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
-    progBtn.onclick = () => { state.view = 'program'; render(); };
-    bottomLinks.appendChild(progBtn);
-  }
+  const progBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
+  progBtn.innerHTML = `<span>4-week program</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
+  progBtn.onclick = () => { state.view = 'program'; render(); };
+  const officeBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
+  officeBtn.innerHTML = `<span>Office · Core Reset</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
+  officeBtn.onclick = () => {
+    const ns2 = nextOfficeSession();
+    state.mode = 'office'; state.week = ns2.week; state.day = ns2.day;
+    state.view = 'officeHome';
+    render();
+  };
   const measBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
   measBtn.innerHTML = `<span>Measurements</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
   measBtn.onclick = () => { state.view = 'measurements'; render(); };
-  bottomLinks.appendChild(measBtn);
+  bottomLinks.append(progBtn, officeBtn, measBtn);
 
   const phraseCard = el('div', `padding:12px 0;`);
   const phraseText = el('div', `font-family:"Instrument Serif",serif;font-size:20px;font-style:italic;line-height:1.35;color:${T.sub};`);
-  const phrasePool = isOffice ? OFFICE_PHRASES : HOME_PHRASES;
-  phraseText.textContent = phrasePool[totalDone % phrasePool.length];
+  phraseText.textContent = HOME_PHRASES[totalDone % HOME_PHRASES.length];
   phraseCard.appendChild(phraseText);
 
-  pad.append(modeToggle, eyebrow, titleWrap, phraseCard, sleepCard, beginBtn, phaseBreak, weekSection, progGrid, bottomLinks, el('div', `height:40px;`));
+  pad.append(eyebrow, titleWrap, phraseCard, sleepCard, beginBtn, phaseBreak, weekSection, progGrid, bottomLinks, el('div', `height:40px;`));
   scroll.appendChild(pad);
   root.appendChild(scroll);
+}
+
+// ═══════════════════════════════════════════════════════
+// OFFICE HOME
+// ═══════════════════════════════════════════════════════
+function renderOfficeHome(root) {
+  const day = officeDay();
+  const totalMax = modeTotal();
+  const totalDone = modeDoneCount();
+  const sessionSeconds = officeSessionSeconds(state.week);
+
+  const hdr = el('div', `padding:calc(env(safe-area-inset-top,12px)+12px) 22px 12px;display:flex;align-items:center;gap:14px;flex-shrink:0;`);
+  const backBtn = el('button', `appearance:none;border:1px solid ${T.hairline};background:transparent;color:${T.fg};width:36px;height:36px;border-radius:6px;display:flex;align-items:center;justify-content:center;`);
+  backBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" stroke="${T.fg}" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="10,2 4,7 10,12"/></svg>`;
+  backBtn.onclick = () => {
+    const ns2 = nextSession();
+    state.mode = 'home'; state.week = ns2.week; state.day = ns2.day;
+    state.view = 'home';
+    render();
+  };
+  const hdrTitle = el('div', `font-family:${T.display};font-weight:700;font-size:22px;text-transform:uppercase;letter-spacing:0.5px;`);
+  hdrTitle.textContent = 'Office · Core Reset';
+  hdr.append(backBtn, hdrTitle);
+
+  const scroll = el('div', `flex:1;overflow-y:auto;`);
+  const pad = el('div', `padding:8px 22px 0;display:flex;flex-direction:column;gap:22px;`);
+
+  // numeric eyebrow
+  const eyebrow = el('div', `display:flex;align-items:baseline;gap:14px;`);
+  const mono = el('div', `font-family:${T.mono_ff};font-size:52px;font-weight:500;line-height:0.9;letter-spacing:-2px;color:${T.fg};`);
+  const dot = el('span', `color:${T.accent};`); dot.textContent = '·';
+  mono.textContent = `W${state.week}`;
+  mono.appendChild(dot);
+  mono.appendChild(document.createTextNode(`D${state.day+1}`));
+  const line = el('div', `flex:1;height:1px;background:${T.hairline};align-self:center;`);
+  const cnt = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:1.5px;`);
+  cnt.textContent = `${totalDone}/${totalMax}`;
+  eyebrow.append(mono, line, cnt);
+
+  // kicker
+  const kickerDiv = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:1.5px;text-transform:uppercase;`);
+  kickerDiv.textContent = `${day.kicker} · ~${Math.round(sessionSeconds / 60)} min`;
+
+  // phrase
+  const phraseCard = el('div', `padding:4px 0;`);
+  const phraseText = el('div', `font-family:"Instrument Serif",serif;font-size:20px;font-style:italic;line-height:1.35;color:${T.sub};`);
+  phraseText.textContent = OFFICE_PHRASES[totalDone % OFFICE_PHRASES.length];
+  phraseCard.appendChild(phraseText);
+
+  // BEGIN button
+  const beginBtn = el('button', `appearance:none;border:none;background:${T.accent};color:${T.accentT};border-radius:6px;padding:20px 22px;display:flex;align-items:center;justify-content:space-between;font-family:${T.display};font-weight:700;font-size:18px;letter-spacing:0.5px;text-transform:uppercase;width:100%;`);
+  const beginL = el('span', `display:flex;align-items:center;gap:12px;`);
+  beginL.innerHTML = `${iconPlay(T.accentT)} Begin`;
+  const beginR = el('span', `font-family:${T.mono_ff};font-size:13px;font-weight:500;`);
+  beginR.textContent = fmt(sessionSeconds);
+  beginBtn.append(beginL, beginR);
+  beginBtn.onclick = startSession;
+
+  const breakdown = renderOfficeBreakdown(state.week);
+  const weekSection = renderWeekSection(OFFICE_PROGRAM.daysPerWeek, 'o', pickOfficeDay, () => 'OFFICE');
+  const progGrid = renderProgressGrid(OFFICE_PROGRAM.weeks, OFFICE_PROGRAM.daysPerWeek, 'o', pickOfficeDay);
+
+  pad.append(eyebrow, kickerDiv, phraseCard, beginBtn, breakdown, weekSection, progGrid, el('div', `height:40px;`));
+  scroll.appendChild(pad);
+  root.append(hdr, scroll);
 }
 
 function renderPhaseChips(day) {
@@ -1499,9 +1544,10 @@ function skipExercise() {
 function abortSession() {
   clearInterval(timerInterval);
   releaseWakeLock();
-  const ns2 = state.mode === 'office' ? nextOfficeSession() : nextSession();
+  const isOffice = state.mode === 'office';
+  const ns2 = isOffice ? nextOfficeSession() : nextSession();
   state.week = ns2.week; state.day = ns2.day;
-  state.view = 'home';
+  state.view = isOffice ? 'officeHome' : 'home';
   render();
 }
 
@@ -1713,7 +1759,7 @@ function renderDone(root) {
     });
     const ns2 = isOffice ? nextOfficeSession() : nextSession();
     state.week = ns2.week; state.day = ns2.day;
-    state.view = 'home';
+    state.view = isOffice ? 'officeHome' : 'home';
     render();
   };
   ctaWrap.append(shareBtn, bankBtn);

@@ -51,7 +51,9 @@ Fonts (all loaded from Google Fonts):
 - `Instrument Serif` — italic quote text (encouragement messages)
 
 ## Office program: confirmed decisions
-Built as a second mode (Home/Office toggle on the home screen), not a replacement for the AM program and not a separate app — user confirmed via Q&A rather than up front.
+Built as a second mode reached via a nav link ("Office · Core Reset" button on the AM home screen, same style as "4-week program"/"Measurements"), not a replacement for the AM program and not a separate app.
+
+**Revised after first delivery:** the first version put a Home/Office toggle at the top of the home screen that re-rendered the whole screen in place. User explicitly rejected this — "morning routine should keep as is, just add a link/button" to navigate to Office as its own screen (`officeHome` view, with its own back button). The AM home screen must never be touched by Office-mode logic again.
 
 - One exercise sequence repeated every session (not alternating day types) — Plank, Wall Sit, Dead Bug Hold, Glute Bridge Hold, Farmer Carry Hold.
 - Hold time uniform across all 5 exercises, same value every exercise: 30/40/50/60 sec across weeks 1–4.
