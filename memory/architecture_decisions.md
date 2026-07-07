@@ -44,6 +44,15 @@ No HTML templates, no innerHTML for layout. Every element is created with `el()`
 ## YouTube thumbnails as CSS background on a `padding-top:56.25%` div
 Tap poster → replace with iframe (same padding-top wrapper). The poster is a zero-JS static image load that avoids loading the YouTube player until the user taps.
 
+## Active session survives an accidental reload
+**Why:** All session state (`state.timeline/idx/left/paused/startedAt`) used to live only in memory. An accidental refresh, or iOS Safari discarding a backgrounded tab, silently reset the workout back to the home screen with no way to pick up where you left off — user hit this directly after the file-split work landed and flagged it.
+
+**How it's built:** `shared.js` has `saveActiveSession()` / `resumeActiveSession()` / `clearActiveSession()`, writing a small checkpoint (`prefix`, `week`, `day`, `idx`, `left`, `paused`, `startedAt`) to `mf.activeSession` — not the timeline array itself, since that's cheap to rebuild via the page's own `buildSessionTimeline()` and rebuilding avoids ever resuming into a stale/mismatched timeline if the program data changes between saves.
+- Saved on every timer tick (`startTimer`'s interval), on every exercise/rest transition, on `skipExercise()`, and on `togglePause()`.
+- Cleared on `finishSession()` (done normally) and `abortSession()` (exited via the X button) — so only a genuinely-interrupted session persists.
+- Each page's boot sequence (`am.js`/`office.js`, right where it used to unconditionally call `nextSession()`) now tries `resumeActiveSession()` first; it only resumes if the checkpoint's `prefix` matches that page's own `PROGRESS_PREFIX`, so an in-progress Office session is never picked up by `index.html` or vice versa. On successful resume it also calls `acquireWakeLock()` + `startTimer()` after `render()`, since a normal boot never starts the timer itself.
+- Resuming always lands on `state.view = 'session'` (never `'preview'`) — if the reload happened while sitting on the preview screen for the next exercise, resume just skips that screen and starts its timer at full duration. That's a deliberate simplification: preview vs. timer-running isn't tracked in the checkpoint, and starting the timer is always the safe, resumable choice.
+
 ## Office program: separate HTML page, separate JS file, linked by real navigation
 Added a 4-week, 2x/week isometric core routine (Plank, Wall Sit, Dead Bug Hold, Glute Bridge Hold, Farmer Carry Hold — 3 rounds, hold time 30→60s across weeks, 30s rest) alongside the original AM program. This went through two revisions before landing on the current shape — both are worth knowing so they aren't re-tried:
 

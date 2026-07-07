@@ -92,8 +92,13 @@ function nextSession() {
       if (!state.progress[`o${w}d${d}`]) return { week: w, day: d };
   return { week: OFFICE_PROGRAM.weeks, day: OFFICE_PROGRAM.daysPerWeek - 1 };
 }
-const ns = nextSession();
-state.week = ns.week; state.day = ns.day;
+let _resumedActiveSession = false;
+if (resumeActiveSession()) {
+  _resumedActiveSession = true;
+} else {
+  const ns = nextSession();
+  state.week = ns.week; state.day = ns.day;
+}
 
 function currentDay() { return officeDay(); }
 function buildSessionTimeline() { return buildOfficeTimeline(state.week); }
@@ -226,3 +231,7 @@ function render() {
 // BOOT
 // ═══════════════════════════════════════════════════════
 render();
+if (_resumedActiveSession && state.view === 'session') {
+  acquireWakeLock();
+  startTimer();
+}

@@ -13,6 +13,20 @@ metadata:
 | `mf.sessions` | Array of session records |
 | `mf.measurements` | Array of body measurement entries |
 | `mf.garmin` | Array of Garmin data entries |
+| `mf.activeSession` | In-progress session checkpoint (see below) — lets an accidental refresh/reload resume instead of restarting |
+
+## Active session checkpoint
+```javascript
+{
+  prefix: 'w',        // or 'o' — must match the page's own PROGRESS_PREFIX to be resumed
+  week: 1, day: 0,
+  idx: 4,             // position in state.timeline
+  left: 23,           // seconds remaining on that item
+  paused: false,
+  startedAt: 1234567890, // Date.now() from when the session began, for duration calc
+}
+```
+Written by `saveActiveSession()` in `shared.js` on every timer tick and on every `state.idx` transition (start, skip, exercise/rest change). Read by `resumeActiveSession()` at boot — rebuilds `state.timeline` fresh via the page's own `buildSessionTimeline()` rather than storing the timeline itself, so it can't go stale if the program data changes. Cleared by `clearActiveSession()` when a session finishes normally or is aborted via the close (X) button. A page only resumes a checkpoint whose `prefix` matches its own — an in-progress Office session sitting in this key is ignored by `am.js` and vice versa.
 
 ## Session record
 ```javascript

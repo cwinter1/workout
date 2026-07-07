@@ -480,8 +480,49 @@ function renderControls() {
 
 function togglePause() {
   state.paused = !state.paused;
+  saveActiveSession();
   const btn = document.getElementById('pause-btn');
   if (btn) btn.innerHTML = `${state.paused ? iconPlay(T.bg) : iconPause(T.bg)} ${state.paused ? 'Resume' : 'Pause'}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// ACTIVE SESSION PERSISTENCE
+// Survives an accidental refresh/reload mid-workout (or iOS backgrounding
+// the tab) by saving just enough to rebuild state.timeline from scratch via
+// the page's own buildSessionTimeline() — not the timeline array itself.
+// ═══════════════════════════════════════════════════════
+function saveActiveSession() {
+  try {
+    localStorage.setItem('mf.activeSession', JSON.stringify({
+      prefix: PROGRESS_PREFIX,
+      week: state.week, day: state.day,
+      idx: state.idx, left: state.left,
+      paused: state.paused, startedAt: state.startedAt,
+    }));
+  } catch {}
+}
+
+function clearActiveSession() {
+  try { localStorage.removeItem('mf.activeSession'); } catch {}
+}
+
+function resumeActiveSession() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('mf.activeSession') || 'null');
+    if (!saved || saved.prefix !== PROGRESS_PREFIX) return false;
+    state.week = saved.week;
+    state.day = saved.day;
+    state.timeline = buildSessionTimeline();
+    if (!state.timeline.length) return false;
+    state.idx = Math.min(saved.idx, state.timeline.length - 1);
+    state.left = Math.min(saved.left, state.timeline[state.idx].seconds);
+    state.paused = !!saved.paused;
+    state.startedAt = saved.startedAt;
+    state.view = 'session';
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -510,6 +551,7 @@ function startSession() {
   state.paused = false;
   state.startedAt = Date.now();
   state.view = 'preview';
+  saveActiveSession();
   acquireWakeLock();
   render();
 }
@@ -525,6 +567,7 @@ function startTimer() {
       if (state.idx + 1 < state.timeline.length) {
         state.idx++;
         state.left = state.timeline[state.idx].seconds;
+        saveActiveSession();
         if (state.timeline[state.idx].kind === 'rest') {
           state.view = 'session';
           render();
@@ -537,6 +580,7 @@ function startTimer() {
         finishSession();
       }
     } else {
+      saveActiveSession();
       if (state.left <= 10 && state.left > 0) beepTick(state.left <= 3 ? 880 : 440);
       updateTimerDisplay();
     }
@@ -607,6 +651,7 @@ function skipExercise() {
     state.idx++;
     state.left = state.timeline[state.idx].seconds;
     state.view = 'preview';
+    saveActiveSession();
     render();
   } else {
     finishSession();
@@ -616,6 +661,7 @@ function skipExercise() {
 function abortSession() {
   clearInterval(timerInterval);
   releaseWakeLock();
+  clearActiveSession();
   const ns = nextSession();
   state.week = ns.week; state.day = ns.day;
   state.view = 'home';
@@ -625,6 +671,7 @@ function abortSession() {
 function finishSession() {
   clearInterval(timerInterval);
   releaseWakeLock();
+  clearActiveSession();
   const key = `${PROGRESS_PREFIX}${state.week}d${state.day}`;
   const now = Date.now();
   const duration = state.startedAt ? Math.round((now - state.startedAt) / 1000) : defaultSessionSeconds();

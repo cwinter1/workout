@@ -202,8 +202,13 @@ function nextSession() {
       if (!state.progress[`w${w}d${d}`]) return { week: w, day: d };
   return { week: PROGRAM.weeks, day: PROGRAM.daysPerWeek - 1 };
 }
-const ns = nextSession();
-state.week = ns.week; state.day = ns.day;
+let _resumedActiveSession = false;
+if (resumeActiveSession()) {
+  _resumedActiveSession = true;
+} else {
+  const ns = nextSession();
+  state.week = ns.week; state.day = ns.day;
+}
 
 function currentDay() { return PROGRAM.days[state.day]; }
 function buildSessionTimeline() { return buildTimeline(state.day, state.week, SESSION_MIN); }
@@ -704,3 +709,7 @@ function render() {
 // BOOT
 // ═══════════════════════════════════════════════════════
 render();
+if (_resumedActiveSession && state.view === 'session') {
+  acquireWakeLock();
+  startTimer();
+}
