@@ -231,7 +231,7 @@ function render() {
 // BOOT
 // ═══════════════════════════════════════════════════════
 render();
-if (_resumedActiveSession && state.view === 'session') {
+if (_resumedActiveSession) {
   acquireWakeLock();
-  startTimer();
+  if (state.view === 'session') startTimer();
 }

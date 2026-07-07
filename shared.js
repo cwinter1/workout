@@ -498,6 +498,7 @@ function saveActiveSession() {
       week: state.week, day: state.day,
       idx: state.idx, left: state.left,
       paused: state.paused, startedAt: state.startedAt,
+      view: state.view === 'preview' ? 'preview' : 'session',
     }));
   } catch {}
 }
@@ -518,7 +519,7 @@ function resumeActiveSession() {
     state.left = Math.min(saved.left, state.timeline[state.idx].seconds);
     state.paused = !!saved.paused;
     state.startedAt = saved.startedAt;
-    state.view = 'session';
+    state.view = saved.view === 'preview' ? 'preview' : 'session';
     return true;
   } catch {
     return false;
@@ -567,13 +568,14 @@ function startTimer() {
       if (state.idx + 1 < state.timeline.length) {
         state.idx++;
         state.left = state.timeline[state.idx].seconds;
-        saveActiveSession();
         if (state.timeline[state.idx].kind === 'rest') {
           state.view = 'session';
+          saveActiveSession();
           render();
           startTimer();
         } else {
           state.view = 'preview';
+          saveActiveSession();
           render();
         }
       } else {
