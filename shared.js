@@ -511,6 +511,13 @@ function resumeActiveSession() {
   try {
     const saved = JSON.parse(localStorage.getItem('mf.activeSession') || 'null');
     if (!saved || saved.prefix !== PROGRESS_PREFIX) return false;
+    // Reject checkpoints saved by an older version of this code that didn't
+    // record `view` — silently defaulting those to 'session' is exactly the
+    // "resume skips the video" bug. Safer to not resume at all than to guess.
+    if (saved.view !== 'preview' && saved.view !== 'session') {
+      clearActiveSession();
+      return false;
+    }
     state.week = saved.week;
     state.day = saved.day;
     state.timeline = buildSessionTimeline();
@@ -519,7 +526,7 @@ function resumeActiveSession() {
     state.left = Math.min(saved.left, state.timeline[state.idx].seconds);
     state.paused = !!saved.paused;
     state.startedAt = saved.startedAt;
-    state.view = saved.view === 'preview' ? 'preview' : 'session';
+    state.view = saved.view;
     return true;
   } catch {
     return false;
