@@ -157,7 +157,7 @@ const YT_IDS = {
   'Happy Baby':        'Ppku7i3ypGM',
   'Supine Twist':      'ezyMaQEaVaI',
   'Savasana':               '1VYlOKUdylM',
-  'Wall Sit':               'k5jOQv-N8XQ',
+  'Wall Sit':               'JQ2JBphtUk8',
   'Terminal Knee Extension':'c9XfHNkB3d8',
   'Straight Leg Raise':     'oPNqN2VfkSY',
   'Plank':                  'A2b2EmIg0dA',
@@ -564,6 +564,25 @@ function startSession() {
   render();
 }
 
+// Advances to the next timeline item the same way whether the previous one
+// expired naturally or was skipped: rest items auto-continue straight into
+// their own running timer, exercise items always land on the video/preview
+// screen first. Never call this on the last item — call finishSession() instead.
+function advanceToNextItem() {
+  state.idx++;
+  state.left = state.timeline[state.idx].seconds;
+  if (state.timeline[state.idx].kind === 'rest') {
+    state.view = 'session';
+    saveActiveSession();
+    render();
+    startTimer();
+  } else {
+    state.view = 'preview';
+    saveActiveSession();
+    render();
+  }
+}
+
 function startTimer() {
   clearInterval(timerInterval);
   timerInterval = setInterval(() => {
@@ -573,18 +592,7 @@ function startTimer() {
       clearInterval(timerInterval);
       beep();
       if (state.idx + 1 < state.timeline.length) {
-        state.idx++;
-        state.left = state.timeline[state.idx].seconds;
-        if (state.timeline[state.idx].kind === 'rest') {
-          state.view = 'session';
-          saveActiveSession();
-          render();
-          startTimer();
-        } else {
-          state.view = 'preview';
-          saveActiveSession();
-          render();
-        }
+        advanceToNextItem();
       } else {
         finishSession();
       }
@@ -657,11 +665,7 @@ function getMedState() {
 function skipExercise() {
   clearInterval(timerInterval);
   if (state.idx + 1 < state.timeline.length) {
-    state.idx++;
-    state.left = state.timeline[state.idx].seconds;
-    state.view = 'preview';
-    saveActiveSession();
-    render();
+    advanceToNextItem();
   } else {
     finishSession();
   }
