@@ -41,3 +41,16 @@ No HTML templates, no innerHTML for layout. Every element is created with `el()`
 
 ## YouTube thumbnails as CSS background on a `padding-top:56.25%` div
 Tap poster → replace with iframe (same padding-top wrapper). The poster is a zero-JS static image load that avoids loading the YouTube player until the user taps.
+
+## Office program: second mode, not a second app
+Added a 4-week, 2x/week isometric core routine (Plank, Wall Sit, Dead Bug Hold, Glute Bridge Hold, Farmer Carry Hold — 3 rounds, hold time 30→60s across weeks, 30s rest) alongside the original AM program, toggled from a Home/Office switch at the top of the home screen.
+
+**Why this shape:** The AM program's session engine (timer, preview/session/rest views, controls, wake lock, Garmin cards, done-screen flow, share card) is entirely reusable — only the *data* differs (what a "day" is, how many sessions/week, what the hold time is). Building a second app or a fully separate screen tree would have duplicated hundreds of lines for no benefit.
+
+**How it's wired in:**
+- `currentDay()` returns `officeDay()` when `state.mode === 'office'`, else `PROGRAM.days[state.day]` — every render function that used to reach into `PROGRAM.days[state.day]` directly now calls `currentDay()`.
+- Office "phases" are the 3 rounds through the 5-exercise circuit (named `'1st Round'/'2nd Round'/'3rd Round'` — the phase-bar UI derives its short label from the first word of the phase name, so plain `'Round 1'/'Round 2'/'Round 3'` would all collapse to the same label).
+- `buildOfficeTimeline(week)` produces the same flat item shape as `buildTimeline()` (`phaseIdx/phaseId/phaseName/intent/exIdx/exName/variant/seconds/kind`), so `renderPreview`/`renderSession`/`renderRest`/`renderControls`/`updateTimerDisplay`/`skipExercise` needed zero changes.
+- Progress keys are prefixed by mode (`w` vs `o`) in the same `mf.progress` object/`mf.sessions` array — no new localStorage keys. `nextOfficeSession()` mirrors `nextSession()` but scans 4 weeks × 2 days instead of 4 × 3.
+- `state.mode` is runtime-only, defaults to `'home'` on boot, and is recomputed (along with `state.week/day`) whenever the toggle is clicked.
+- Office done-screen message pool (`pickOfficeMessage`) and home-screen phrase pool (`OFFICE_PHRASES`) are separate from the AM ones — different tone context (office break, no shower) even though the dry/no-exclamation voice rule is the same.

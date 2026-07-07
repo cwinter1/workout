@@ -178,6 +178,68 @@ const PROGRAM = {
 };
 
 // ═══════════════════════════════════════════════════════
+// OFFICE PROGRAM — isometric core reset, 2x/week
+// ═══════════════════════════════════════════════════════
+const OFFICE_PROGRAM = {
+  weeks: 4,
+  daysPerWeek: 2,
+  rounds: 3,
+  restSeconds: 30,
+  holdSeconds: [30, 40, 50, 60],
+  title: 'Office · Core Reset',
+  kicker: 'Isometric strength, no shower needed',
+  exercises: [
+    { name: 'Plank' },
+    { name: 'Wall Sit' },
+    { name: 'Dead Bug Hold' },
+    { name: 'Glute Bridge Hold' },
+    { name: 'Farmer Carry Hold' },
+  ],
+};
+
+const OFFICE_ROUND_INTENTS = [
+  'First pass. Find the position, then hold it.',
+  'Second pass. You know the shapes now.',
+  "Last pass. Hold what's left to hold.",
+];
+
+const OFFICE_ROUND_NAMES = ['1st Round', '2nd Round', '3rd Round'];
+
+function officeDay() {
+  return {
+    id: 'office', title: OFFICE_PROGRAM.title, kicker: OFFICE_PROGRAM.kicker, tag: 'OFFICE',
+    phases: [0, 1, 2].map(r => ({
+      id: `round${r}`, name: OFFICE_ROUND_NAMES[r], intent: OFFICE_ROUND_INTENTS[r],
+      exercises: OFFICE_PROGRAM.exercises,
+    })),
+  };
+}
+
+function officeSessionSeconds(week) {
+  const hold = OFFICE_PROGRAM.holdSeconds[week - 1];
+  const n = OFFICE_PROGRAM.exercises.length * OFFICE_PROGRAM.rounds;
+  return n * hold + (n - 1) * OFFICE_PROGRAM.restSeconds;
+}
+
+function buildOfficeTimeline(week) {
+  const hold = OFFICE_PROGRAM.holdSeconds[week - 1];
+  const day = officeDay();
+  const out = [];
+  day.phases.forEach((ph, pi) => {
+    ph.exercises.forEach((ex, ei) => {
+      out.push({ phaseIdx:pi, phaseId:ph.id, phaseName:ph.name, intent:ph.intent,
+        exIdx:ei, exName:ex.name, variant:`${hold} sec hold`, seconds:hold, kind:'exercise' });
+      const isVeryLast = pi === day.phases.length - 1 && ei === ph.exercises.length - 1;
+      if (!isVeryLast) {
+        out.push({ phaseIdx:pi, phaseId:ph.id, phaseName:ph.name, intent:'',
+          exIdx:-1, exName:'Rest', variant:'', seconds:OFFICE_PROGRAM.restSeconds, kind:'rest' });
+      }
+    });
+  });
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════
 // EXERCISE DESCRIPTIONS & GIF QUERIES
 // ═══════════════════════════════════════════════════════
 const EX_INFO = {
@@ -225,6 +287,10 @@ const EX_INFO = {
   'Wall Sit':               { desc:'Back flat against a wall, slide down until thighs are parallel to the floor. Feet hip-width, knees directly over ankles. Hold the position — this is pure quad endurance.', gif:'wall sit exercise quad strength' },
   'Terminal Knee Extension':{ desc:'Anchor a resistance band behind you at knee height. Step into the loop with one leg. From a slight bend, press your knee straight against the band resistance. Isolates the VMO — the teardrop muscle that stabilises the kneecap.', gif:'terminal knee extension band exercise TKE' },
   'Straight Leg Raise':     { desc:'Lie on your back, one leg bent with foot flat. Tighten the quad of the straight leg, then lift it to the height of the bent knee. Lower slowly. Safe quad activation — no knee compression.', gif:'straight leg raise exercise quad rehab' },
+  'Plank':                  { desc:'Forearms and toes on the floor, elbows under shoulders. Body in one straight line from head to heels — brace your core and squeeze your glutes. Don\'t let your hips sag or pike up.', gif:'plank exercise proper form' },
+  'Dead Bug Hold':          { desc:'Lie on your back, arms reaching up, knees bent at 90°. Extend one arm overhead and the opposite leg straight out, hovering just above the floor. Press your lower back flat into the ground and hold — no arching.', gif:'dead bug hold exercise core' },
+  'Glute Bridge Hold':      { desc:'Lie on your back, feet flat, knees bent. Drive your hips up until your body forms a straight line from shoulders to knees. Squeeze your glutes and hold at the top — don\'t let your hips drop.', gif:'glute bridge hold exercise' },
+  'Farmer Carry Hold':      { desc:'Stand tall holding two even-weight objects at your sides — water bottles, a bag, whatever\'s on hand. Shoulders back, core braced, grip tight. Hold the position without shifting or leaning.', gif:'farmers carry hold exercise' },
 };
 
 function getExInfo(name) {
@@ -279,6 +345,10 @@ const YT_IDS = {
   'Wall Sit':               'k5jOQv-N8XQ',
   'Terminal Knee Extension':'c9XfHNkB3d8',
   'Straight Leg Raise':     'oPNqN2VfkSY',
+  'Plank':                  'A2b2EmIg0dA',
+  'Dead Bug Hold':          'bxn9FBrt4-A',
+  'Glute Bridge Hold':      'wPM8icPu6H8',
+  'Farmer Carry Hold':      'lLAw6fUccKA',
 };
 
 const COACH_CUES = {
@@ -319,6 +389,14 @@ const HOME_PHRASES = [
   "Movement is the answer to most of what's wrong.",
   "This is the one thing today that's entirely for you.",
   "Four weeks. You're inside it now.",
+];
+
+const OFFICE_PHRASES = [
+  "Fifteen minutes. No shower required.",
+  "Twice a week is all this asks.",
+  "The chair did the damage. This undoes a little of it.",
+  "Quick, quiet, done before anyone notices you left your desk.",
+  "No equipment. No sweat. No excuse.",
 ];
 
 function phaseSeconds(totalMin) {
@@ -366,6 +444,7 @@ function fmt(s) {
 // ═══════════════════════════════════════════════════════
 let state = {
   view: 'home',
+  mode: 'home',
   week: 1, day: 0,
   timeline: [],
   idx: 0,
@@ -385,6 +464,26 @@ function nextSession() {
 }
 const ns = nextSession();
 state.week = ns.week; state.day = ns.day;
+
+function nextOfficeSession() {
+  for (let w = 1; w <= OFFICE_PROGRAM.weeks; w++)
+    for (let d = 0; d < OFFICE_PROGRAM.daysPerWeek; d++)
+      if (!state.progress[`o${w}d${d}`]) return { week: w, day: d };
+  return { week: OFFICE_PROGRAM.weeks, day: OFFICE_PROGRAM.daysPerWeek - 1 };
+}
+
+function currentDay() {
+  return state.mode === 'office' ? officeDay() : PROGRAM.days[state.day];
+}
+
+function modeTotal() {
+  return state.mode === 'office' ? OFFICE_PROGRAM.weeks * OFFICE_PROGRAM.daysPerWeek : 12;
+}
+
+function modeDoneCount() {
+  const prefix = state.mode === 'office' ? 'o' : 'w';
+  return Object.keys(state.progress).filter(k => k.startsWith(prefix)).length;
+}
 
 const SESSION_MIN = 35;
 let timerInterval = null;
@@ -541,6 +640,31 @@ function pickMessage(streak, week, dayTag, total) {
   return pool[total % pool.length];
 }
 
+function pickOfficeMessage(streak, week, total) {
+  if (total === 1) return "First office session. Fifteen minutes, no shower required.";
+  if (total === 8) return "Eight sessions. Four weeks of office breaks, done.";
+  if (streak === 21) return "Twenty-one days of showing up somewhere. Habit, not willpower.";
+  if (streak === 14) return "Two weeks straight. The break is starting to feel normal.";
+  if (streak === 10) return "Ten days in a row. The desk didn't win today either.";
+  if (streak === 7)  return "A full week without skipping. Most people never start.";
+  if (streak === 5)  return "Five in a row. This is just part of the day now.";
+  if (streak === 3)  return "Three straight. The chair is starting to notice.";
+  if (streak === 2)  return "Two in a row. That's the harder one done.";
+
+  const pool = [
+    "Fifteen minutes, no equipment, no sweat. That's the whole point.",
+    "The hold gets longer. The excuse doesn't get any better.",
+    "Nobody in the office knows you just did this. That's fine.",
+    "Core braced, spine long. That's what a desk chair can't teach you.",
+    "A quiet fifteen minutes in the middle of the day. Underrated.",
+    "Isometric work doesn't look like much from the outside. It adds up anyway.",
+    "Still no shower needed. Still counts.",
+    `${total} sessions in. Same desk, less damage.`,
+    "The body doesn't know it's a work day. It just knows you moved.",
+  ];
+  return pool[total % pool.length];
+}
+
 function captureProgressPhoto(sessionKey) {
   return new Promise(resolve => {
     const input = document.createElement('input');
@@ -600,7 +724,7 @@ async function shareWorkout(streak, total, duration) {
   ctx.fillText('MORNING FLOW', 80, 96);
 
   // workout title
-  const parts = PROGRAM.days[state.day].title.toUpperCase().split(' · ');
+  const parts = currentDay().title.toUpperCase().split(' · ');
   ctx.fillStyle = '#e8e5dd';
   ctx.font = '700 84px "Space Grotesk", sans-serif';
   ctx.fillText(parts[0], 80, 240);
@@ -625,7 +749,8 @@ async function shareWorkout(streak, total, duration) {
   // encouragement
   ctx.fillStyle = '#e8e5dd';
   ctx.font = 'italic 400 34px "Instrument Serif", serif';
-  ctx.fillText(`"${pickMessage(streak, state.week, PROGRAM.days[state.day].tag, total)}"`, 80, 770);
+  const shareMsg = state.mode === 'office' ? pickOfficeMessage(streak, state.week, total) : pickMessage(streak, state.week, currentDay().tag, total);
+  ctx.fillText(`"${shareMsg}"`, 80, 770);
 
   // footer
   ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(80, 860, 920, 1);
@@ -670,13 +795,74 @@ function render() {
 // ═══════════════════════════════════════════════════════
 // HOME
 // ═══════════════════════════════════════════════════════
+function renderModeToggle() {
+  const wrap = el('div', `display:flex;gap:4px;background:${T.pill};padding:4px;border-radius:8px;`);
+  [['home', 'Home'], ['office', 'Office']].forEach(([key, label]) => {
+    const active = state.mode === key;
+    const btn = el('button', `flex:1;appearance:none;border:none;background:${active ? T.accent : 'transparent'};color:${active ? T.accentT : T.mono};border-radius:6px;padding:10px 0;font-family:${T.mono_ff};font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;`);
+    btn.textContent = label;
+    btn.onclick = () => {
+      if (state.mode === key) return;
+      state.mode = key;
+      const ns2 = key === 'office' ? nextOfficeSession() : nextSession();
+      state.week = ns2.week; state.day = ns2.day;
+      render();
+    };
+    wrap.appendChild(btn);
+  });
+  return wrap;
+}
+
+function renderWeekSection(count, prefix, pickFn, tagForIndex) {
+  const weekSection = el('div', ``);
+  weekSection.appendChild(sectionHeader('This week'));
+  const weekRow = el('div', `display:flex;gap:6px;margin-top:10px;`);
+  for (let d2 = 0; d2 < count; d2++) {
+    const done = !!state.progress[`${prefix}${state.week}d${d2}`];
+    const isToday = d2 === state.day;
+    const btn = el('button', `flex:1;border:none;background:${done ? T.accent : T.card};color:${done ? T.accentT : T.fg};border-radius:6px;padding:14px 12px;text-align:left;${isToday && !done ? `outline:1.5px solid ${T.accent};outline-offset:-1.5px;` : ''}`);
+    const lbl = el('div', `font-family:${T.mono_ff};font-size:10px;letter-spacing:1.5px;opacity:0.7;text-transform:uppercase;`);
+    lbl.textContent = `D${d2+1}`;
+    const status = el('div', `font-family:${T.display};font-weight:700;font-size:18px;margin-top:6px;line-height:1;text-transform:uppercase;letter-spacing:0.5px;`);
+    status.textContent = done ? 'Done' : isToday ? 'Today' : 'Open';
+    const tag = el('div', `font-family:${T.mono_ff};font-size:10px;margin-top:6px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;`);
+    tag.textContent = tagForIndex(d2);
+    btn.append(lbl, status, tag);
+    btn.onclick = () => pickFn(state.week, d2);
+    weekRow.appendChild(btn);
+  }
+  weekSection.appendChild(weekRow);
+  return weekSection;
+}
+
+function renderOfficeBreakdown(week) {
+  const hold = OFFICE_PROGRAM.holdSeconds[week - 1];
+  const totalSec = officeSessionSeconds(week);
+  const wrap = el('div', ``);
+  wrap.appendChild(sectionHeader('Session breakdown'));
+  const list = el('div', `margin-top:10px;display:flex;flex-direction:column;gap:4px;`);
+  [
+    ['Hold time', `${hold} sec / exercise`],
+    ['Rounds', `${OFFICE_PROGRAM.rounds} × ${OFFICE_PROGRAM.exercises.length} exercises`],
+    ['Rest', `${OFFICE_PROGRAM.restSeconds} sec between`],
+    ['Total', `~${Math.round(totalSec / 60)} min`],
+  ].forEach(([k, v]) => list.appendChild(renderStat(k, v)));
+  wrap.appendChild(list);
+  return wrap;
+}
+
 function renderHome(root) {
-  const day = PROGRAM.days[state.day];
-  const totalDone = Object.keys(state.progress).length;
-  const doneThisWeek = [0,1,2].map(d => !!state.progress[`w${state.week}d${d}`]);
+  const isOffice = state.mode === 'office';
+  const day = currentDay();
+  const totalMax = modeTotal();
+  const totalDone = modeDoneCount();
+  const sessionSeconds = isOffice ? officeSessionSeconds(state.week) : SESSION_MIN * 60;
+  const sessionMinutes = Math.round(sessionSeconds / 60);
 
   const scroll = el('div', `flex:1;overflow-y:auto;padding-top:calc(env(safe-area-inset-top,12px) + 16px);`);
   const pad = el('div', `padding:0 22px;display:flex;flex-direction:column;gap:22px;`);
+
+  const modeToggle = renderModeToggle();
 
   // numeric eyebrow
   const eyebrow = el('div', `display:flex;align-items:baseline;gap:14px;`);
@@ -687,7 +873,7 @@ function renderHome(root) {
   mono.appendChild(document.createTextNode(`D${state.day+1}`));
   const line = el('div', `flex:1;height:1px;background:${T.hairline};align-self:center;`);
   const cnt = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:1.5px;`);
-  cnt.textContent = `${totalDone}/12`;
+  cnt.textContent = `${totalDone}/${totalMax}`;
   eyebrow.append(mono, line, cnt);
 
   // day title
@@ -700,7 +886,7 @@ function renderHome(root) {
     titleDiv.appendChild(d2);
   });
   const kickerDiv = el('div', `margin-top:8px;font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:1.5px;text-transform:uppercase;`);
-  kickerDiv.textContent = `${day.kicker} · ${SESSION_MIN} min`;
+  kickerDiv.textContent = `${day.kicker} · ${sessionMinutes} min`;
   titleWrap.append(titleDiv, kickerDiv);
 
   // Garmin sleep card
@@ -762,52 +948,43 @@ function renderHome(root) {
   const beginL = el('span', `display:flex;align-items:center;gap:12px;`);
   beginL.innerHTML = `${iconPlay(T.accentT)} Begin`;
   const beginR = el('span', `font-family:${T.mono_ff};font-size:13px;font-weight:500;`);
-  beginR.textContent = `${SESSION_MIN}:00`;
+  beginR.textContent = fmt(sessionSeconds);
   beginBtn.append(beginL, beginR);
   beginBtn.onclick = startSession;
 
-  // phase breakdown
-  const phaseBreak = renderPhaseChips(day);
+  // phase / session breakdown
+  const phaseBreak = isOffice ? renderOfficeBreakdown(state.week) : renderPhaseChips(day);
 
   // This week
-  const weekSection = el('div', ``);
-  weekSection.appendChild(sectionHeader('This week'));
-  const weekRow = el('div', `display:flex;gap:6px;margin-top:10px;`);
-  [0,1,2].forEach(d2 => {
-    const done = doneThisWeek[d2];
-    const isToday = d2 === state.day;
-    const btn = el('button', `flex:1;border:none;background:${done ? T.accent : T.card};color:${done ? T.accentT : T.fg};border-radius:6px;padding:14px 12px;text-align:left;${isToday && !done ? `outline:1.5px solid ${T.accent};outline-offset:-1.5px;` : ''}`);
-    const lbl = el('div', `font-family:${T.mono_ff};font-size:10px;letter-spacing:1.5px;opacity:0.7;text-transform:uppercase;`);
-    lbl.textContent = `D${d2+1}`;
-    const status = el('div', `font-family:${T.display};font-weight:700;font-size:18px;margin-top:6px;line-height:1;text-transform:uppercase;letter-spacing:0.5px;`);
-    status.textContent = done ? 'Done' : isToday ? 'Today' : 'Open';
-    const tag = el('div', `font-family:${T.mono_ff};font-size:10px;margin-top:6px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;`);
-    tag.textContent = PROGRAM.days[d2].tag;
-    btn.append(lbl, status, tag);
-    btn.onclick = () => pickDay(state.week, d2);
-    weekRow.appendChild(btn);
-  });
-  weekSection.appendChild(weekRow);
+  const weekSection = isOffice
+    ? renderWeekSection(OFFICE_PROGRAM.daysPerWeek, 'o', pickOfficeDay, () => 'OFFICE')
+    : renderWeekSection(3, 'w', pickDay, d2 => PROGRAM.days[d2].tag);
 
-  // 4-week progress grid
-  const progGrid = renderProgressGrid();
+  // progress grid
+  const progGrid = isOffice
+    ? renderProgressGrid(OFFICE_PROGRAM.weeks, OFFICE_PROGRAM.daysPerWeek, 'o', pickOfficeDay)
+    : renderProgressGrid(4, 3, 'w', pickDay);
 
   // Full program link + measurements link
   const bottomLinks = el('div', `display:flex;flex-direction:column;gap:8px;`);
-  const progBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
-  progBtn.innerHTML = `<span>4-week program</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
-  progBtn.onclick = () => { state.view = 'program'; render(); };
+  if (!isOffice) {
+    const progBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
+    progBtn.innerHTML = `<span>4-week program</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
+    progBtn.onclick = () => { state.view = 'program'; render(); };
+    bottomLinks.appendChild(progBtn);
+  }
   const measBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
   measBtn.innerHTML = `<span>Measurements</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
   measBtn.onclick = () => { state.view = 'measurements'; render(); };
-  bottomLinks.append(progBtn, measBtn);
+  bottomLinks.appendChild(measBtn);
 
   const phraseCard = el('div', `padding:12px 0;`);
   const phraseText = el('div', `font-family:"Instrument Serif",serif;font-size:20px;font-style:italic;line-height:1.35;color:${T.sub};`);
-  phraseText.textContent = HOME_PHRASES[Object.keys(state.progress).length % HOME_PHRASES.length];
+  const phrasePool = isOffice ? OFFICE_PHRASES : HOME_PHRASES;
+  phraseText.textContent = phrasePool[totalDone % phrasePool.length];
   phraseCard.appendChild(phraseText);
 
-  pad.append(eyebrow, titleWrap, phraseCard, sleepCard, beginBtn, phaseBreak, weekSection, progGrid, bottomLinks, el('div', `height:40px;`));
+  pad.append(modeToggle, eyebrow, titleWrap, phraseCard, sleepCard, beginBtn, phaseBreak, weekSection, progGrid, bottomLinks, el('div', `height:40px;`));
   scroll.appendChild(pad);
   root.appendChild(scroll);
 }
@@ -837,27 +1014,27 @@ function renderPhaseChips(day) {
   return wrap;
 }
 
-function renderProgressGrid() {
+function renderProgressGrid(weeksCount, daysCount, prefix, pickFn) {
   const wrap = el('div', ``);
-  wrap.appendChild(sectionHeader('4-week progress'));
-  const grid = el('div', `margin-top:10px;display:grid;grid-template-columns:auto repeat(3,1fr);gap:6px;align-items:center;`);
+  wrap.appendChild(sectionHeader(`${weeksCount}-week progress`));
+  const grid = el('div', `margin-top:10px;display:grid;grid-template-columns:auto repeat(${daysCount},1fr);gap:6px;align-items:center;`);
   grid.appendChild(el('span', ``));
-  [0,1,2].forEach(d => {
+  for (let d = 0; d < daysCount; d++) {
     const lbl = el('span', `font-family:${T.mono_ff};font-size:9px;color:${T.mono};letter-spacing:1px;text-transform:uppercase;text-align:center;`);
     lbl.textContent = `D${d+1}`;
     grid.appendChild(lbl);
-  });
-  [1,2,3,4].forEach(w => {
+  }
+  for (let w = 1; w <= weeksCount; w++) {
     const wlbl = el('span', `font-family:${T.mono_ff};font-size:9px;color:${T.mono};letter-spacing:1px;`);
     wlbl.textContent = `W${w}`;
     grid.appendChild(wlbl);
-    [0,1,2].forEach(d => {
-      const done = !!state.progress[`w${w}d${d}`];
+    for (let d = 0; d < daysCount; d++) {
+      const done = !!state.progress[`${prefix}${w}d${d}`];
       const btn = el('button', `border:none;height:28px;border-radius:2px;background:${done ? T.accent : T.pill};width:100%;`);
-      btn.onclick = () => pickDay(w, d);
+      btn.onclick = () => pickFn(w, d);
       grid.appendChild(btn);
-    });
-  });
+    }
+  }
   wrap.appendChild(grid);
   return wrap;
 }
@@ -876,7 +1053,7 @@ function startSession() {
     src.connect(ctx.destination);
     src.start(0);
   } catch {}
-  state.timeline = buildTimeline(state.day, state.week, SESSION_MIN);
+  state.timeline = state.mode === 'office' ? buildOfficeTimeline(state.week) : buildTimeline(state.day, state.week, SESSION_MIN);
   state.idx = 0;
   state.left = state.timeline[0].seconds;
   state.paused = false;
@@ -887,6 +1064,13 @@ function startSession() {
 }
 
 function pickDay(w, d) {
+  state.mode = 'home';
+  state.week = w; state.day = d;
+  startSession();
+}
+
+function pickOfficeDay(w, d) {
+  state.mode = 'office';
   state.week = w; state.day = d;
   startSession();
 }
@@ -946,7 +1130,7 @@ function updateTimerDisplay() {
   }
 
   if (cur.phaseId === 'main' && cur.kind !== 'rest') {
-    const tag = PROGRAM.days[state.day].tag;
+    const tag = currentDay().tag;
     const cues = COACH_CUES[tag] || [];
     if (cues.length) {
       const elapsed = cur.seconds - state.left;
@@ -983,7 +1167,7 @@ function getMedState() {
 // ═══════════════════════════════════════════════════════
 function renderPreview(root) {
   const cur = state.timeline[state.idx];
-  const day_ = PROGRAM.days[state.day];
+  const day_ = currentDay();
   const info = getExInfo(cur.exName);
 
   // header
@@ -1114,7 +1298,7 @@ function renderPreview(root) {
 // ═══════════════════════════════════════════════════════
 function renderSession(root) {
   const cur = state.timeline[state.idx];
-  const day_ = PROGRAM.days[state.day];
+  const day_ = currentDay();
   const totalSec = state.timeline.reduce((a, t) => a + t.seconds, 0);
   const doneSec = state.timeline.slice(0, state.idx).reduce((a, t) => a + t.seconds, 0);
 
@@ -1190,7 +1374,7 @@ function renderSession(root) {
 // ═══════════════════════════════════════════════════════
 function renderRest(root) {
   const cur = state.timeline[state.idx];
-  const day_ = PROGRAM.days[state.day];
+  const day_ = currentDay();
   const totalSec = state.timeline.reduce((a, t) => a + t.seconds, 0);
   const doneSec = state.timeline.slice(0, state.idx).reduce((a, t) => a + t.seconds, 0);
   const nextEx = state.timeline[state.idx + 1];
@@ -1315,7 +1499,7 @@ function skipExercise() {
 function abortSession() {
   clearInterval(timerInterval);
   releaseWakeLock();
-  const ns2 = nextSession();
+  const ns2 = state.mode === 'office' ? nextOfficeSession() : nextSession();
   state.week = ns2.week; state.day = ns2.day;
   state.view = 'home';
   render();
@@ -1324,13 +1508,16 @@ function abortSession() {
 function finishSession() {
   clearInterval(timerInterval);
   releaseWakeLock();
-  const key = `w${state.week}d${state.day}`;
+  const prefix = state.mode === 'office' ? 'o' : 'w';
+  const key = `${prefix}${state.week}d${state.day}`;
   const now = Date.now();
-  const duration = state.startedAt ? Math.round((now - state.startedAt) / 1000) : SESSION_MIN * 60;
+  const defaultDuration = state.mode === 'office' ? officeSessionSeconds(state.week) : SESSION_MIN * 60;
+  const duration = state.startedAt ? Math.round((now - state.startedAt) / 1000) : defaultDuration;
   state.progress[key] = { done: true, at: now };
   saveProgress();
   const sessions = loadSessions();
-  sessions.push({ key, at: now, duration, week: state.week, day: state.day, dayTitle: PROGRAM.days[state.day].title, dayTag: PROGRAM.days[state.day].tag });
+  const cd = currentDay();
+  sessions.push({ key, at: now, duration, week: state.week, day: state.day, dayTitle: cd.title, dayTag: cd.tag, mode: state.mode });
   saveSessions(sessions);
   state.lastDuration = duration;
   state.view = 'done';
@@ -1341,12 +1528,14 @@ function finishSession() {
 // DONE
 // ═══════════════════════════════════════════════════════
 function renderDone(root) {
-  const total = Object.keys(state.progress).length;
+  const isOffice = state.mode === 'office';
+  const total = modeDoneCount();
+  const totalMax = modeTotal();
   const streak = getStreak();
-  const duration = state.lastDuration || SESSION_MIN * 60;
-  const dayTag = PROGRAM.days[state.day].tag;
-  const sessionKey = `w${state.week}d${state.day}`;
-  const msg = pickMessage(streak, state.week, dayTag, total);
+  const duration = state.lastDuration || (isOffice ? officeSessionSeconds(state.week) : SESSION_MIN * 60);
+  const dayTag = currentDay().tag;
+  const sessionKey = `${isOffice ? 'o' : 'w'}${state.week}d${state.day}`;
+  const msg = isOffice ? pickOfficeMessage(streak, state.week, total) : pickMessage(streak, state.week, dayTag, total);
 
   const scroll = el('div', `flex:1;overflow-y:auto;padding:calc(env(safe-area-inset-top,12px)+36px) 22px 0;`);
   const body = el('div', `display:flex;flex-direction:column;gap:24px;`);
@@ -1386,7 +1575,7 @@ function renderDone(root) {
   [
     ['Duration',  `${durationMin} min`],
     ['Session',   `Week ${state.week} · Day ${state.day + 1}`],
-    ['Program',   `${total} of 12 done`],
+    ['Program',   `${total} of ${totalMax} done`],
   ].forEach(([k, v]) => stats.appendChild(renderStat(k, v)));
   body.appendChild(stats);
 
@@ -1514,7 +1703,7 @@ function renderDone(root) {
     const preG = loadGarmin().find(g => g.type === 'pre' && g.sessionKey === sessionKey) || {};
     syncToSheets({
       date: dateKey(), week: state.week, day: state.day,
-      dayTitle: PROGRAM.days[state.day].title, dayTag: PROGRAM.days[state.day].tag,
+      dayTitle: currentDay().title, dayTag: currentDay().tag,
       duration: duration,
       workoutRating: workoutRating,
       sleepScore: preG.sleepScore ?? null,
@@ -1522,7 +1711,7 @@ function renderDone(root) {
       calories: isNaN(cal) ? null : cal,
       activeHours: isNaN(ah) ? null : ah, activeMins: isNaN(am) ? null : am,
     });
-    const ns2 = nextSession();
+    const ns2 = isOffice ? nextOfficeSession() : nextSession();
     state.week = ns2.week; state.day = ns2.day;
     state.view = 'home';
     render();

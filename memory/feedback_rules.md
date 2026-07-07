@@ -49,3 +49,15 @@ Fonts (all loaded from Google Fonts):
 - `Manrope` — body text
 - `JetBrains Mono` — labels, metadata, chips
 - `Instrument Serif` — italic quote text (encouragement messages)
+
+## Office program: confirmed decisions
+Built as a second mode (Home/Office toggle on the home screen), not a replacement for the AM program and not a separate app — user confirmed via Q&A rather than up front.
+
+- One exercise sequence repeated every session (not alternating day types) — Plank, Wall Sit, Dead Bug Hold, Glute Bridge Hold, Farmer Carry Hold.
+- Hold time uniform across all 5 exercises, same value every exercise: 30/40/50/60 sec across weeks 1–4.
+- 3 rounds through the circuit, 30 sec rest between every hold (including between rounds).
+- Session length is **not** pinned to 15 min — it grows with hold time (~15 min week 1 → ~22 min week 4). "Fifteen minutes" in the original ask was the starting point, not a hard cap enforced every week.
+- Farmer Carry is a **static loaded hold** (stand braced, holding whatever's on hand — no walking, no set kg progression) to fit the isometric/office/no-space framing, not a walking farmer's carry.
+- Video preview shown before every occurrence of every exercise (all 15 per session), same as the AM program — not just the first time each exercise appears.
+- Done screen keeps full parity with the AM program (Garmin post card, photo capture, rating, share) — not trimmed down despite the "no sweat, no shower" framing.
+- Office gets its own encouragement message pool (`pickOfficeMessage`) and home phrase pool (`OFFICE_PHRASES`) — do not reuse the AM ones, tone context differs (office break vs. morning practice) even though the dry/no-exclamation voice rule is identical.

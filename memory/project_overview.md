@@ -35,12 +35,17 @@ git push origin --delete feature/<short-topic>
 ```
 
 ## Program structure
-3 day types × 4 weeks. `PROGRAM.days[0/1/2]`:
+
+Two programs, switched via a Home/Office toggle at the top of the home screen (`state.mode`, 'home' or 'office'). `currentDay()` returns the active program's "day" data regardless of mode — most render code is shared.
+
+**AM program** (`state.mode === 'home'`) — 3 day types × 4 weeks. `PROGRAM.days[0/1/2]`:
 - Index 0: STRENGTH — Strength · Mobility
 - Index 1: POSTURE — Posture · Desk Recovery
 - Index 2: YOGA — Yoga · Active Recovery
 
 `SESSION_MIN = 35`. Phase time allocation: stretch 4/35, warmup 5/35, main 18/35, yoga 5/35, meditation 3/35.
+
+**Office program** (`state.mode === 'office'`) — `OFFICE_PROGRAM`, one isometric circuit × 4 weeks × 2 sessions/week (8 total). Same 5 exercises every session (Plank, Wall Sit, Dead Bug Hold, Glute Bridge Hold, Farmer Carry Hold), 3 rounds, 30s rest between holds. Hold time increases by week: 30/40/50/60 sec — so total session length grows from ~15 min (week 1) to ~22 min (week 4), it isn't pinned to a fixed duration. `officeDay()` builds a synthetic "day" whose 3 "phases" are the 3 rounds; `buildOfficeTimeline(week)` builds the flat timeline the same way `buildTimeline()` does for the AM program.
 
 ## View routing
 `state.view` → `render()` calls the matching renderer:

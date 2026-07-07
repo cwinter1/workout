@@ -17,16 +17,19 @@ metadata:
 ## Session record
 ```javascript
 {
-  key: 'w1d0',           // week + day key
+  key: 'w1d0',           // 'w' prefix = Home/AM program, 'o' prefix = Office program (e.g. 'o1d0')
   at: timestamp,
   duration: seconds,
   week: 1,               // 1–4
-  day: 0,                // 0–2
+  day: 0,                // AM: 0–2. Office: 0–1
   dayTitle: 'Strength · Mobility',
-  dayTag: 'STRENGTH',
+  dayTag: 'STRENGTH',    // Office sessions use 'OFFICE'
+  mode: 'home',          // 'home' or 'office' — added for the Office program
   photo: 'data:image/jpeg;base64,...',  // 240×240 thumbnail, optional
 }
 ```
+
+`mf.progress` keys are prefixed by mode: `w{week}d{day}` for the AM program (12 total), `o{week}d{day}` for Office (8 total). Both share the same `mf.progress` object and the same `mf.sessions` array — no separate storage keys were introduced. `state.mode` ('home' | 'office') is a runtime-only field (not persisted); it's recomputed via `nextSession()`/`nextOfficeSession()` whenever the mode toggle is switched or the app boots.
 
 ## Garmin entry shapes
 ```javascript
