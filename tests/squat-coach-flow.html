@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Squat Coach Flow QA</title>
+<style>
+  body { font-family: monospace; background: #0f0f0f; color: #ccc; padding: 24px; }
+  h2 { color: #fff; margin: 0 0 20px; }
+  .test { padding: 8px 12px; margin: 4px 0; border-radius: 4px; font-size: 14px; }
+  .pass { background: #1a2e1a; color: #4caf50; }
+  .fail { background: #2e1a1a; color: #f44336; }
+  #summary { margin-top: 20px; font-size: 15px; color: #fff; }
+</style>
+</head>
+<body>
+<h2>Squat Coach Flow QA</h2>
+<p style="color:#888;font-size:13px;max-width:600px;">Pure-logic only — angle math, rep-detection
+state machine, and the 4 scoring dimensions. No MediaPipe, no camera, no DOM beyond this page's
+own test runner, matching the same scope as tests/session-flow.html.</p>
+<div id="results"></div>
+<div id="summary"></div>
+
+<script>
+// ── Inlined pure functions under test (copied from ../squat-coach.js's pure-logic section —
+// this section has zero DOM/browser-API dependencies, so it's copied verbatim rather than
+// re-derived, same pattern as session-flow.html's inline-copy approach) ──────────────────────
+
+const SQUAT_EXERCISE = {
+  name: 'Squat',
+  romAngleTop: 170, romAngleBottom: 80,
+  stabilityUnit: 0.02, jerkUnit: 4,
+  valgusThreshold: 0.06, leanThreshold: 45,
+  positiveLines: ['Clean rep.', 'Solid rep. No flags.', 'Good depth. Controlled.', 'Consistent rep.'],
+};
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function stddev(arr) {
+  if (!arr.length) return 0;
+  const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+  const variance = arr.reduce((a, b) => a + (b - mean) * (b - mean), 0) / arr.length;
+  return Math.sqrt(variance);
+}
+
+function angleAt(a, b, c) {
+  const v1 = { x: a.x - b.x, y: a.y - b.y };
+  const v2 = { x: c.x - b.x, y: c.y - b.y };
+  const m1 = Math.hypot(v1.x, v1.y), m2 = Math.hypot(v2.x, v2.y);
+  if (m1 < 1e-6 || m2 < 1e-6) return null;
+  const cos = clamp((v1.x * v2.x + v1.y * v2.y) / (m1 * m2), -1, 1);
+  return Math.acos(cos) * 180 / Math.PI;
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function tAtY(p1, p2, targetY) {
+  const dy = p2.y - p1.y;
+  if (Math.abs(dy) < 1e-6) return 0.5;
+  return (targetY - p1.y) / dy;
+}
+
+function kneeInwardOffset(hip, knee, ankle, midlineX, shoW) {
+  const t = tAtY(hip, ankle, knee.y);
+  const predX = lerp(hip.x, ankle.x, t);
+  const dir = Math.sign(midlineX - predX) || 1;
+  return ((knee.x - predX) * dir) / (shoW || 1e-6);
+}
+
+const LM = { LSHO: 11, RSHO: 12, LHIP: 23, RHIP: 24, LKNEE: 25, RKNEE: 26, LANK: 27, RANK: 28 };
+const VIS_MIN = 0.6;
+
+function hipCenterOf(lm) { return { x: (lm[LM.LHIP].x + lm[LM.RHIP].x) / 2, y: (lm[LM.LHIP].y + lm[LM.RHIP].y) / 2 }; }
+function shoulderWidthOf(lm) { return Math.hypot(lm[LM.LSHO].x - lm[LM.RSHO].x, lm[LM.LSHO].y - lm[LM.RSHO].y); }
+
+function pickWorkingSide(lm) {
+  const leftVis = (lm[LM.LHIP].visibility + lm[LM.LKNEE].visibility + lm[LM.LANK].visibility) / 3;
+  const rightVis = (lm[LM.RHIP].visibility + lm[LM.RKNEE].visibility + lm[LM.RANK].visibility) / 3;
+  if (leftVis > VIS_MIN && rightVis > VIS_MIN && Math.abs(leftVis - rightVis) < 0.15) return 'both';
+  return leftVis >= rightVis ? 'left' : 'right';
+}
+
+function workingLandmarks(lm, side) {
+  if (side !== 'both') {
+    const s = side === 'left'
+      ? { sho: LM.LSHO, hip: LM.LHIP, knee: LM.LKNEE, ank: LM.LANK }
+      : { sho: LM.RSHO, hip: LM.RHIP, knee: LM.RKNEE, ank: LM.RANK };
+    return { shoulder: lm[s.sho], hip: lm[s.hip], knee: lm[s.knee], ankle: lm[s.ank] };
+  }
+  const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, visibility: Math.min(a.visibility, b.visibility) });
+  return {
+    shoulder: mid(lm[LM.LSHO], lm[LM.RSHO]), hip: mid(lm[LM.LHIP], lm[LM.RHIP]),
+    knee: mid(lm[LM.LKNEE], lm[LM.RKNEE]), ankle: mid(lm[LM.LANK], lm[LM.RANK]),
+  };
+}
+
+function bothLegsVisible(lm) {
+  return lm[LM.LHIP].visibility > VIS_MIN && lm[LM.RHIP].visibility > VIS_MIN &&
+         lm[LM.LKNEE].visibility > VIS_MIN && lm[LM.RKNEE].visibility > VIS_MIN &&
+         lm[LM.LANK].visibility > VIS_MIN && lm[LM.RANK].visibility > VIS_MIN;
+}
+
+const DEBOUNCE_FRAMES = 4;
+const BOTTOM_DEBOUNCE_FRAMES = 3;
+const REP_ABANDON_MS = 8000;
+const MIN_REP_MS = 300;
+
+function newFsm() {
+  return { fsmState: 'standing', debounceCount: 0, hipYHist: [], prevSmoothedY: null, topBaselineY: null, repBuf: [], repStartMs: 0 };
+}
+
+function frameSample(lm, side, working, kneeAngle, ts, hipC, shoW) {
+  return {
+    ts, hipX: hipC.x, hipY: hipC.y, shoW, kneeAngle, working,
+    bothVisible: bothLegsVisible(lm),
+    lHip: lm[LM.LHIP], rHip: lm[LM.RHIP], lKnee: lm[LM.LKNEE], rKnee: lm[LM.RKNEE],
+    lAnk: lm[LM.LANK], rAnk: lm[LM.RANK],
+    phase: null,
+  };
+}
+
+function tickFsm(fsm, lm, ts) {
+  const side = pickWorkingSide(lm);
+  const working = workingLandmarks(lm, side);
+  const kneeAngle = angleAt(working.hip, working.knee, working.ankle);
+  const hipC = hipCenterOf(lm);
+  const shoW = shoulderWidthOf(lm) || 1e-6;
+
+  fsm.hipYHist.push(hipC.y);
+  if (fsm.hipYHist.length > 5) fsm.hipYHist.shift();
+  const smoothedY = fsm.hipYHist.reduce((a, b) => a + b, 0) / fsm.hipYHist.length;
+  const velocity = fsm.prevSmoothedY == null ? 0 : smoothedY - fsm.prevSmoothedY;
+  fsm.prevSmoothedY = smoothedY;
+  if (fsm.topBaselineY == null) fsm.topBaselineY = smoothedY;
+
+  const DESCEND_DELTA = 0.4 * shoW;
+  const RETURN_DELTA = 0.3 * shoW;
+
+  const sample = frameSample(lm, side, working, kneeAngle, ts, hipC, shoW);
+  let completed = null;
+
+  if (fsm.fsmState === 'standing') {
+    fsm.topBaselineY += (smoothedY - fsm.topBaselineY) * 0.05;
+    if (smoothedY - fsm.topBaselineY > DESCEND_DELTA) {
+      if (++fsm.debounceCount >= DEBOUNCE_FRAMES) { fsm.fsmState = 'descending'; fsm.debounceCount = 0; fsm.repBuf = []; fsm.repStartMs = ts; }
+    } else fsm.debounceCount = 0;
+  } else if (fsm.fsmState === 'descending') {
+    sample.phase = 'descending'; fsm.repBuf.push(sample);
+    if (velocity <= 0) { if (++fsm.debounceCount >= BOTTOM_DEBOUNCE_FRAMES) { fsm.fsmState = 'bottom'; fsm.debounceCount = 0; } }
+    else fsm.debounceCount = 0;
+    if (ts - fsm.repStartMs > REP_ABANDON_MS) { fsm.fsmState = 'standing'; fsm.debounceCount = 0; fsm.repBuf = []; }
+  } else if (fsm.fsmState === 'bottom') {
+    sample.phase = 'bottom'; fsm.repBuf.push(sample);
+    if (velocity < 0) { if (++fsm.debounceCount >= BOTTOM_DEBOUNCE_FRAMES) { fsm.fsmState = 'ascending'; fsm.debounceCount = 0; } }
+    else fsm.debounceCount = 0;
+  } else if (fsm.fsmState === 'ascending') {
+    sample.phase = 'ascending'; fsm.repBuf.push(sample);
+    if (smoothedY - fsm.topBaselineY < RETURN_DELTA) {
+      if (++fsm.debounceCount >= DEBOUNCE_FRAMES) {
+        fsm.fsmState = 'standing'; fsm.debounceCount = 0;
+        if (ts - fsm.repStartMs > MIN_REP_MS) completed = fsm.repBuf;
+        fsm.repBuf = [];
+      }
+    } else fsm.debounceCount = 0;
+  }
+  return completed;
+}
+
+function scoreRom(repBuf, cfg) {
+  const angles = repBuf.map(f => f.kneeAngle).filter(a => a != null);
+  const minAngle = angles.length ? Math.min(...angles) : cfg.romAngleTop;
+  const angleScore = clamp(Math.round(1 + 9 * (cfg.romAngleTop - minAngle) / (cfg.romAngleTop - cfg.romAngleBottom)), 1, 10);
+  const bottomFrame = repBuf.reduce((min, f) => (f.hipY > min.hipY ? f : min), repBuf[0]);
+  const yRatio = (bottomFrame.working.hip.y - bottomFrame.working.knee.y) / bottomFrame.shoW;
+  const yScore = clamp(Math.round(1 + 9 * clamp((yRatio + 0.5) / 1.0, 0, 1)), 1, 10);
+  return { score: Math.round((angleScore + yScore) / 2), minAngle, bottomFrame };
+}
+
+function scoreStability(repBuf, cfg) {
+  const holdFrames = repBuf.filter(f => f.phase === 'bottom');
+  const sample = holdFrames.length >= 5 ? holdFrames : repBuf;
+  const normX = sample.map(f => f.hipX / f.shoW);
+  const stdevX = stddev(normX);
+  return { score: clamp(Math.round(10 - stdevX / cfg.stabilityUnit), 1, 10), stdevX };
+}
+
+function scoreSpeed(repBuf, cfg) {
+  const vs = [];
+  for (let i = 1; i < repBuf.length; i++) {
+    const dt = (repBuf[i].ts - repBuf[i - 1].ts) / 1000;
+    if (dt > 0) vs.push((repBuf[i].hipY - repBuf[i - 1].hipY) / dt);
+  }
+  const js = [];
+  for (let i = 1; i < vs.length; i++) {
+    const dt = (repBuf[i + 1].ts - repBuf[i].ts) / 1000;
+    if (dt > 0) js.push(Math.abs(vs[i] - vs[i - 1]) / dt);
+  }
+  const avgAbsJerk = js.length ? js.reduce((a, b) => a + b, 0) / js.length : 0;
+  const normJerk = avgAbsJerk * (repBuf[0] ? repBuf[0].shoW : 1);
+  return { score: clamp(Math.round(10 - normJerk / cfg.jerkUnit), 1, 10), normJerk };
+}
+
+function scoreForm(repBuf, cfg, bottomFrame) {
+  const midFrames = repBuf.filter(f => f.bothVisible && f.phase !== null);
+  let valgusFlagged = false, maxOffset = 0;
+  if (midFrames.length) {
+    let flaggedCount = 0;
+    midFrames.forEach(f => {
+      const midlineX = (f.lAnk.x + f.rAnk.x) / 2;
+      const offL = kneeInwardOffset(f.lHip, f.lKnee, f.lAnk, midlineX, f.shoW);
+      const offR = kneeInwardOffset(f.rHip, f.rKnee, f.rAnk, midlineX, f.shoW);
+      const off = Math.max(offL, offR);
+      if (off > maxOffset) maxOffset = off;
+      if (off > cfg.valgusThreshold) flaggedCount++;
+    });
+    valgusFlagged = flaggedCount >= 3;
+  }
+  const torso = { x: bottomFrame.working.shoulder.x - bottomFrame.working.hip.x, y: bottomFrame.working.shoulder.y - bottomFrame.working.hip.y };
+  const torsoLen = Math.hypot(torso.x, torso.y);
+  const leanDeg = torsoLen < 1e-6 ? 0 : Math.acos(clamp(-torso.y / torsoLen, -1, 1)) * 180 / Math.PI;
+  const leanFlagged = leanDeg > cfg.leanThreshold;
+  let score = 10;
+  if (valgusFlagged) score -= 3;
+  if (leanFlagged) score -= 3;
+  return { score: clamp(score, 1, 10), valgusFlagged, leanFlagged, leanDeg, maxOffset };
+}
+
+// ── Test runner ────────────────────────────────────────────────────────────────
+let passed = 0, failed = 0;
+const results = document.getElementById('results');
+
+function assert(name, condition, detail = '') {
+  const div = document.createElement('div');
+  if (condition) {
+    div.className = 'test pass';
+    div.textContent = `PASS  ${name}`;
+    passed++;
+  } else {
+    div.className = 'test fail';
+    div.textContent = `FAIL  ${name}${detail ? ' — ' + detail : ''}`;
+    failed++;
+  }
+  results.appendChild(div);
+}
+
+function pt(x, y) { return { x, y }; }
+
+// ── Test: angleAt ──────────────────────────────────────────────────────────────
+(function testAngleAt() {
+  const right = angleAt(pt(0, 0), pt(0, 1), pt(1, 1)); // 90°: a above b, c to the right of b
+  assert('angleAt — right angle ≈ 90°', Math.abs(right - 90) < 0.01, `got ${right}`);
+
+  const straight = angleAt(pt(0, 0), pt(0, 1), pt(0, 2)); // a-b-c collinear, b between: 180°
+  assert('angleAt — straight line ≈ 180°', Math.abs(straight - 180) < 0.01, `got ${straight}`);
+
+  const degenerate = angleAt(pt(0, 0), pt(0, 0), pt(1, 1)); // zero-length vector b->a
+  assert('angleAt — degenerate zero-length vector returns null', degenerate === null);
+})();
+
+// ── Test: ROM/depth scoring direction ────────────────────────────────────────────
+(function testRomScoring() {
+  const shoW = 0.2;
+  const shallowRep = [{
+    ts: 0, hipY: 0.52, shoW, kneeAngle: 150,
+    working: { hip: pt(0.5, 0.52), knee: pt(0.5, 0.7) }, // hip well above knee — shallow
+  }];
+  const deepRep = [{
+    ts: 0, hipY: 0.72, shoW, kneeAngle: 78,
+    working: { hip: pt(0.5, 0.72), knee: pt(0.5, 0.7) }, // hip at/below knee level — deep
+  }];
+  const shallow = scoreRom(shallowRep, SQUAT_EXERCISE);
+  const deep = scoreRom(deepRep, SQUAT_EXERCISE);
+  assert('scoreRom — shallow squat scores low', shallow.score <= 3, `got ${shallow.score}`);
+  assert('scoreRom — deep squat scores high', deep.score >= 8, `got ${deep.score}`);
+  assert('scoreRom — deep scores higher than shallow', deep.score > shallow.score);
+})();
+
+// ── Test: stability scoring ──────────────────────────────────────────────────────
+(function testStabilityScoring() {
+  const shoW = 0.2;
+  const flat = [0, 1, 2, 3, 4].map(i => ({ ts: i, hipX: 0.5, shoW, phase: 'bottom' }));
+  const noisy = [0.5, 0.54, 0.46, 0.55, 0.45].map((x, i) => ({ ts: i, hipX: x, shoW, phase: 'bottom' }));
+  const flatScore = scoreStability(flat, SQUAT_EXERCISE);
+  const noisyScore = scoreStability(noisy, SQUAT_EXERCISE);
+  assert('scoreStability — perfectly flat hip-x scores 10', flatScore.score === 10, `got ${flatScore.score}`);
+  assert('scoreStability — noisy hip-x scores lower than flat', noisyScore.score < flatScore.score, `got ${noisyScore.score}`);
+})();
+
+// ── Test: speed/jerk scoring ─────────────────────────────────────────────────────
+(function testSpeedScoring() {
+  const shoW = 0.2;
+  const smooth = [];
+  for (let i = 0; i < 10; i++) smooth.push({ ts: i * 33, hipY: 0.5 + i * 0.01, shoW }); // constant velocity
+  const jerky = [];
+  for (let i = 0; i < 10; i++) jerky.push({ ts: i * 33, hipY: 0.5 + (i % 2 === 0 ? 0.05 : -0.03) * i, shoW }); // alternating
+  const smoothScore = scoreSpeed(smooth, SQUAT_EXERCISE);
+  const jerkyScore = scoreSpeed(jerky, SQUAT_EXERCISE);
+  assert('scoreSpeed — constant velocity scores 10 (zero jerk)', smoothScore.score === 10, `got ${smoothScore.score}`);
+  assert('scoreSpeed — erratic movement scores lower than smooth', jerkyScore.score < smoothScore.score, `got ${jerkyScore.score}`);
+})();
+
+// ── Test: knee valgus offset — symmetric (not flagged) vs asymmetric (flagged),
+// in two different physical-side layouts, to confirm the formula is orientation-agnostic ────
+(function testValgusOffset() {
+  const shoW = 0.2;
+  // Layout A: left leg at lower x, right leg at higher x (typical unmirrored front view)
+  const symA_off = kneeInwardOffset(pt(0.4, 0.5), pt(0.4, 0.7), pt(0.4, 0.9), 0.5, shoW);
+  assert('kneeInwardOffset — straight leg, no deviation ≈ 0', Math.abs(symA_off) < 0.001, `got ${symA_off}`);
+
+  const valgusA_off = kneeInwardOffset(pt(0.4, 0.5), pt(0.46, 0.7), pt(0.4, 0.9), 0.5, shoW);
+  assert('kneeInwardOffset — knee shifted toward midline flags positive offset', valgusA_off > SQUAT_EXERCISE.valgusThreshold, `got ${valgusA_off}`);
+
+  // Layout B: mirrored — the leg with the deviation now sits on the HIGHER-x side of the frame.
+  // Same inward motion (toward the ankle midline) should still register as a positive offset.
+  const valgusB_off = kneeInwardOffset(pt(0.6, 0.5), pt(0.54, 0.7), pt(0.6, 0.9), 0.5, shoW);
+  assert('kneeInwardOffset — orientation-agnostic (mirrored layout still flags inward motion)', valgusB_off > SQUAT_EXERCISE.valgusThreshold, `got ${valgusB_off}`);
+})();
+
+// ── Test: forward-lean angle ─────────────────────────────────────────────────────
+(function testLeanAngle() {
+  const uprightBuf = [{ working: { shoulder: pt(0.5, 0.2), hip: pt(0.5, 0.5) } }];
+  const leaningBuf = [{ working: { shoulder: pt(0.75, 0.35), hip: pt(0.5, 0.5) } }];
+  const dummyRepBuf = [{ ts: 0, hipY: 0.5, shoW: 0.2, bothVisible: false, phase: null }];
+  const upright = scoreForm(dummyRepBuf, SQUAT_EXERCISE, uprightBuf[0]);
+  const leaning = scoreForm(dummyRepBuf, SQUAT_EXERCISE, leaningBuf[0]);
+  assert('scoreForm — upright torso not lean-flagged', upright.leanFlagged === false, `leanDeg=${upright.leanDeg}`);
+  assert('scoreForm — 50°+ forward lean is flagged', leaning.leanFlagged === true, `leanDeg=${leaning.leanDeg}`);
+  assert('scoreForm — flagged lean drops the score', leaning.score < upright.score);
+})();
+
+// ── Test: rep-detection FSM, full cycle + jitter robustness ─────────────────────
+(function testRepFsm() {
+  // Synthetic landmarks: shoulders/knees/ankles fixed, hip.y moves with `depth` (0=standing,
+  // 1=full squat). Both legs always fully visible so pickWorkingSide returns 'both'.
+  function makeLandmarks(depth) {
+    const lm = new Array(33);
+    const mk = (x, y) => ({ x, y, visibility: 1 });
+    lm[LM.LSHO] = mk(0.45, 0.2); lm[LM.RSHO] = mk(0.55, 0.2);
+    const hipY = 0.5 + depth * 0.15;
+    lm[LM.LHIP] = mk(0.45, hipY); lm[LM.RHIP] = mk(0.55, hipY);
+    lm[LM.LKNEE] = mk(0.45, 0.75); lm[LM.RKNEE] = mk(0.55, 0.75);
+    lm[LM.LANK] = mk(0.45, 0.95); lm[LM.RANK] = mk(0.55, 0.95);
+    return lm;
+  }
+
+  const fsm = newFsm();
+  let completedCount = 0;
+  let ts = 0;
+  const FRAME_MS = 33;
+
+  function feed(depth) { ts += FRAME_MS; if (tickFsm(fsm, makeLandmarks(depth), ts)) completedCount++; }
+
+  // Standing hold (calibrates topBaseline) — includes one small, realistic single-frame jitter
+  // (a few percent of shoulder width) well under the descend threshold, representing normal
+  // per-frame landmark noise, not a dramatic mistrack.
+  for (let i = 0; i < 10; i++) feed(0);
+  feed(0.05); // modest jitter blip
+  for (let i = 0; i < 10; i++) feed(0);
+  const stateAfterJitter = fsm.fsmState;
+  assert('repFsm — modest single-frame jitter does not trigger a transition', stateAfterJitter === 'standing', `fsmState=${stateAfterJitter}`);
+  assert('repFsm — modest single-frame jitter does not complete a rep', completedCount === 0);
+
+  // Full rep cycle: descend -> bottom hold -> ascend -> standing
+  for (let i = 1; i <= 15; i++) feed(i / 15);       // descending ramp
+  for (let i = 0; i < 5; i++) feed(1);               // bottom hold
+  for (let i = 15; i >= 0; i--) feed(i / 15);         // ascending ramp
+  for (let i = 0; i < 10; i++) feed(0);               // standing settle
+
+  assert('repFsm — one full squat cycle completes exactly one rep', completedCount === 1, `got ${completedCount}`);
+  assert('repFsm — FSM returns to standing after the cycle', fsm.fsmState === 'standing', `fsmState=${fsm.fsmState}`);
+})();
+
+// ── Summary ───────────────────────────────────────────────────────────────────
+const summary = document.getElementById('summary');
+summary.textContent = `${passed + failed} tests — ${passed} passed, ${failed} failed`;
+summary.style.color = failed === 0 ? '#4caf50' : '#f44336';
+</script>
+</body>
+</html>
