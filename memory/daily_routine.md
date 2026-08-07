@@ -178,6 +178,17 @@ unverified until a real device test — everything else about this feature, incl
 9-step sequence and the persistence/streak logic, was verified end-to-end in this sandbox with
 MediaPipe stubbed).
 
+## Progress screen deep-link, direct from the AM home screen
+
+The Progress/Evolution screen was originally reachable only one level deep (a button inside
+`daily-routine.html`'s own landing screen). After a real-device check flagged it as effectively
+hard to find, `daily-routine.js`'s boot sequence now checks for `?view=progress` in the URL and
+sets `state.view = 'progress'` before the first `render()` — a plain-`daily-routine.html` load is
+unaffected, still landing on `'landing'` as before. `am.js`'s home screen (`renderHome()`) gained a
+matching "Daily Routine — Progress" link (styled like the existing `progBtn`/`measBtn` outlined nav
+links, in the same `bottomLinks` group) pointing at `daily-routine.html?view=progress`, so Chris
+doesn't have to open Daily Routine's landing screen first just to check trend data.
+
 ## QA process for future changes
 
 Chris asked for future changes to this feature to go through a repeatable multi-persona review

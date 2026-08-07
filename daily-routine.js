@@ -797,4 +797,7 @@ function onPoseResults(results) {
 // ═══════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════
+// ?view=progress deep-links straight to the Progress/Evolution screen — lets the AM home screen
+// link directly there instead of always landing on the routine's own landing screen first.
+if (/[?&]view=progress\b/.test(location.search)) state.view = 'progress';
 render();
