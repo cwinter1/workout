@@ -5,4 +5,5 @@
 - [Architecture decisions](architecture_decisions.md) — iframe trick, multi-file split (index.html/office.html/shared.js/am.js/office.js), localStorage limits
 - [Feedback and rules](feedback_rules.md) — tone choices, what not to do, confirmed decisions
 - [Data shapes](data_shapes.md) — localStorage keys, record schemas, Garmin entry types
-- [Squat Coach](squat_coach.md) — camera/MediaPipe decisions, testing limitations, tunable scoring constants
+- [Form Coach](form_coach.md) — shared camera/MediaPipe engine architecture, MediaPipe decisions, testing limitations, tunable scoring constants for squat/push-up/lunge/plank
+- [Daily Routine](daily_routine.md) — the fixed 9-step camera-coached sequence, its persistence shape, and the grilled decisions behind its scope
