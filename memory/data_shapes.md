@@ -159,3 +159,14 @@ script is updated. `Code.gs` already routes all 3 payload `type`s (`session`/`da
 `measurement`) into 3 separate sheet tabs, each auto-created with its own header row on first use,
 plus an `Unrouted` catch-all tab for any future `type` this version of the script doesn't know
 about yet.
+
+**`tests/apps-script-sync.test.js`** (Node, not a browser `.html` test like this repo's others —
+`Code.gs` needs `fs`+`vm` to load and can't run in a page anyway, since it only ever executes
+inside Google's Apps Script runtime) is a contract test tying the client's payload shapes directly
+to `Code.gs`'s routing logic: it loads the real `apps-script/Code.gs` source into a sandboxed `vm`
+context with a stubbed `SpreadsheetApp`/`ContentService`, then feeds it payloads built the same way
+`shared.js`/`daily-routine.js`/`am.js` actually construct them, asserting each lands in the right
+tab with the right columns. Added after a review round found the client/server field-name agreement
+across this boundary had only ever been checked once, by hand, in an ad hoc scratch script that
+was never committed — a future rename on either side (e.g. `resultsJson` → something else) would
+otherwise ship silently with nothing failing. Run with `node tests/apps-script-sync.test.js`.

@@ -240,7 +240,9 @@ verified via an ad hoc headless-Playwright harness during each review round (stu
 `getUserMedia`/`startFrameLoop`, drive frames by hand) rather than folded into this suite, and via
 real Tier 2 device checks — see `.claude/skills/form-coach-qa-review/SKILL.md` for the full
 process, added specifically so this multi-persona review became a repeatable practice rather than
-a one-off.
+a one-off. `tests/apps-script-sync.test.js` (Node, run via `node tests/apps-script-sync.test.js`)
+is a separate contract test covering the `syncToSheets()`/`apps-script/Code.gs` boundary — see
+`memory/data_shapes.md`'s "Google Sheets sync" section for why it exists and what it checks.
 
 ## Distance-readable sizing on the live camera screen (Chris: "the human eye can't see things
 bright... make it human usage right size")

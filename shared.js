@@ -261,6 +261,8 @@ function saveGarmin(g)       { try { localStorage.setItem('mf.garmin', JSON.stri
 function loadSyncUrl()       { return localStorage.getItem('mf.syncUrl') || ''; }
 function saveSyncUrl(u)      { if (u) localStorage.setItem('mf.syncUrl', u); else localStorage.removeItem('mf.syncUrl'); }
 
+// Duplicated (by necessity, different runtimes) as computeIndex() in apps-script/Code.gs — keep
+// both in sync if this formula ever changes.
 function computePerformanceIndex(sleepScore, workoutRating, calories) {
   const vals = [sleepScore != null ? sleepScore / 100 : null,
                 workoutRating != null ? workoutRating / 5 : null,
