@@ -139,6 +139,16 @@ same "skipped before doing anything" case scored two different ways depending on
 would skew the evolution trend), so `summarizeStep()` now also treats a zero-active-time hold as
 `overall: null`.
 
+## Off-device copy via Google Sheets sync
+
+`finishRoutine()` also calls `syncToSheets()` (a `daily_routine`-typed payload — date/totalReps/
+totalHoldSeconds/avgQuality/a JSON-stringified `results` breakdown) right after
+`recordRoutineCompletion()`, best-effort and silent if no `mf.syncUrl` is configured. Added after
+Chris asked to "keep data save[d]... be able to do future analysis... see the relation between
+process and time" — `mf.dailyRoutine` in `localStorage` stays authoritative either way; this is
+purely an off-device durability/analysis copy, same mechanism the AM/Office "Bank it" flow already
+used. Full detail in `memory/data_shapes.md`'s "Google Sheets sync" section.
+
 ## Streak calculation
 
 `dailyRoutineStreak()` mirrors `shared.js`'s `getStreak()` shape (consecutive calendar days ending

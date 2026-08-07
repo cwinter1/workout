@@ -580,6 +580,16 @@ function renderMeasurements(root) {
     const list = loadMeasurements();
     list.push(entry);
     saveMeasurements(list);
+    // Best-effort off-device copy, same mechanism as the AM/Office "Bank it" sync and Daily
+    // Routine's completion sync — see memory/data_shapes.md. `date` here is dateKey()-style
+    // (YYYY-MM-DD), not entry.date's full ISO timestamp, so all 3 payload types group by day the
+    // same way in the sheet.
+    syncToSheets({
+      type: 'measurement',
+      date: dateKey(new Date(entry.date).getTime()),
+      weight: entry.weight ?? null, waist: entry.waist ?? null, hips: entry.hips ?? null,
+      hr: entry.hr ?? null, energy: entry.energy ?? null,
+    });
     state.view = 'measurements';
     render();
   };

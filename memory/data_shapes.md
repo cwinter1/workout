@@ -14,6 +14,8 @@ metadata:
 | `mf.measurements` | Array of body measurement entries |
 | `mf.garmin` | Array of Garmin data entries |
 | `mf.activeSession` | In-progress session checkpoint (see below) — lets an accidental refresh/reload resume instead of restarting |
+| `mf.dailyRoutine` | Array of Daily Routine calendar-date completion records — see `memory/daily_routine.md` for the full shape |
+| `mf.syncUrl` | Google Apps Script `/exec` URL, pasted once on the Measurements screen — see "Google Sheets sync" below |
 
 ## Active session checkpoint
 ```javascript
@@ -105,3 +107,51 @@ function saveSleep(score, hours, mins) {
   saveGarmin(garmin);
 }
 ```
+
+## Google Sheets sync — best-effort, off-device copy for durability + trend analysis
+
+`localStorage` is still the source of truth for everything in this app (`CLAUDE.md`'s
+"Non-Negotiable Constraints" is correct that there's no backend/account) — but there IS one
+real, intentional exception to "no sync": `shared.js`'s `syncToSheets(payload)` fires a
+fire-and-forget `POST` (`mode: 'no-cors'`, so the response is unreadable and a failure is silent —
+this is a best-effort backup, not a guaranteed write) to a Google Apps Script `/exec` URL you paste
+once into the "Google Sheets sync" card on the Measurements screen (`loadSyncUrl()`/
+`saveSyncUrl()`, key `mf.syncUrl`). If `mf.syncUrl` is empty, `syncToSheets()` is a no-op — nothing
+is sent anywhere by default.
+
+This existed narrowly for AM/Office's "Bank it" flow only until Chris asked to "keep data
+save[d]... be able to do future analysis... see the relation between process and time" —
+extended at that point to also cover Daily Routine completions and Measurements entries, so all
+three land in the same external, analyzable, durable-beyond-one-device copy. Every payload now
+carries a `type` field so the receiving Apps Script can route rows correctly:
+
+```javascript
+// type: 'session' — AM/Office, sent from shared.js's "Bank it" handler
+{ type: 'session', date: 'YYYY-MM-DD', week: 1, day: 0, dayTitle: 'Strength · Mobility',
+  dayTag: 'STRENGTH', duration: 2100, workoutRating: 4,
+  sleepScore: 76, sleepHours: 7, sleepMins: 30, calories: 420, activeHours: 0, activeMins: 35 }
+
+// type: 'daily_routine' — sent from daily-routine.js's finishRoutine()
+{ type: 'daily_routine', date: 'YYYY-MM-DD', totalReps: 45, totalHoldSeconds: 105,
+  avgQuality: 7.4,
+  resultsJson: '[{"label":"Push-Ups","kind":"reps","target":20,"completedReps":20,"overall":7.1,"skipped":false}, ...]' }
+
+// type: 'measurement' — sent from am.js's Measurements "Save entry" handler
+{ type: 'measurement', date: 'YYYY-MM-DD', weight: 80.5, waist: 90, hips: 100, hr: 62, energy: 3 }
+```
+
+`daily_routine`'s per-step detail is a single JSON-stringified `resultsJson` cell, not flat
+columns — the step count/shape varies day to day (timer vs reps vs hold steps, warmup/cooldown
+included), so there's no fixed column mapping that wouldn't either truncate data on a longer day
+or leave empty columns on a shorter one. `date` is `dateKey()`-style (`YYYY-MM-DD`) on all three
+payload types, including `measurement` (whose own stored `entry.date` is a full ISO timestamp,
+`new Date().toISOString()`) — so a Sheet grouping/pivoting by date works the same way regardless of
+which payload type a row came from.
+
+**The Apps Script endpoint itself is not part of this repo** — it's an external script you host in
+your own Google account (Chris's), reached only via the pasted `/exec` URL. Extending which
+payload `type`s exist here doesn't automatically make your script route/columnize them; the script
+side needs its own update to handle `daily_routine`/`measurement` rows (e.g. writing to separate
+sheet tabs keyed on `type`, or parsing `resultsJson`) if you want them to land somewhere useful
+rather than just failing silently or landing in whatever the script's default/catch-all behavior
+is.

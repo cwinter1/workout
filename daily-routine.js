@@ -708,7 +708,21 @@ function stopCamera() {
 
 function finishRoutine() {
   stopCamera();
-  recordRoutineCompletion(state.results);
+  const entry = recordRoutineCompletion(state.results);
+  // Best-effort off-device copy for durability + future trend analysis (Chris: "keep data
+  // saved... see the relation between process and time") — reuses the same syncToSheets()/
+  // mf.syncUrl mechanism shared.js's AM/Office "Bank it" flow already uses, so this only fires if
+  // a sync URL is configured on the Measurements screen. `resultsJson` carries the full per-step
+  // breakdown (label/kind/reps-or-hold-seconds/overall/skipped) as one cell, since the step count
+  // varies day to day and doesn't map cleanly onto fixed columns.
+  syncToSheets({
+    type: 'daily_routine',
+    date: entry.date,
+    totalReps: entry.totalReps,
+    totalHoldSeconds: entry.totalHoldSeconds,
+    avgQuality: entry.avgQuality,
+    resultsJson: JSON.stringify(entry.results),
+  });
   state.view = 'done';
   render();
 }

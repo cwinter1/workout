@@ -16,7 +16,7 @@ The app title is in Hebrew: **Morning Flow · כריס** (כריס = Chris). Lay
 
 - Plain multi-file static site — no framework, no build step, no bundler. Splitting into multiple files is allowed (see "File Structure" below) as long as every file is loaded via plain `<script src="...">` (classic scripts, not ES modules) so it still works when opened directly via `file://`. **One documented exception**: `squat-coach.html`'s "Start Camera" flow and `daily-routine.html`'s "Start Routine" flow both need `getUserMedia`, which requires a secure context (https/`localhost`) — those two pages cannot be exercised via plain `file://`, since that's a browser platform rule, not something this app's code controls. See `memory/form_coach.md`.
 - iOS Safari only — every layout and API decision must work on iPhone
-- `localStorage` only — no backend, no sync, no account
+- `localStorage` only — no backend, no account. **One documented exception**: a best-effort, opt-in `syncToSheets()` (`shared.js`) POSTs a copy of session/Daily-Routine/measurement records to a Google Apps Script URL you paste in yourself (`mf.syncUrl`, empty by default) — off-device durability + trend analysis, not a second source of truth. `localStorage` is unaffected either way and stays authoritative. See `memory/data_shapes.md`'s "Google Sheets sync" section.
 - No emojis anywhere
 - No Garmin API — manual entry only, by design
 - Never push directly to main
@@ -468,7 +468,7 @@ Not built yet. Do not wire up until asked.
 
 - **Device**: iPhone, iOS Safari only
 - **Location**: Israel
-- **Data**: `localStorage` only — no backend, no sync
+- **Data**: `localStorage` only — no backend or account; an opt-in Google Sheets sync exists for off-device durability/analysis (see "Non-Negotiable Constraints" above), but `localStorage` stays the source of truth
 - **Goal**: 4-week morning routine → track body metrics + Garmin data manually
 - **Garmin**: Manual entry — no API, no PC export. Two entry points: pre-workout sleep data, post-workout activity data.
 
