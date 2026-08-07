@@ -112,6 +112,8 @@ function writeUnrouted(data) {
   sheet.appendRow([new Date().toISOString(), JSON.stringify(data)]);
 }
 
+// Duplicated (by necessity, different runtimes) from computePerformanceIndex() in shared.js —
+// keep both in sync if this formula ever changes.
 function computeIndex(data) {
   const sleep  = data.sleepScore    != null ? data.sleepScore / 100           : null;
   const rating = data.workoutRating != null ? data.workoutRating / 5          : null;

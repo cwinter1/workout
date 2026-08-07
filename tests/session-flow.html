@@ -196,7 +196,10 @@ function assert(name, condition, detail = '') {
 
 // ── Test 8: computePerformanceIndex ───────────────────────────────────────────
 (function testPerfIndex() {
-  assert('perfIndex — all inputs: sleep=80, rating=4, cals=400', computePerformanceIndex(80, 4, 400) === 83);
+  // sleep 80/100=0.8, rating 4/5=0.8, cals min(400/500,1)=0.8, weights [0.4,0.4,0.2] ->
+  // 0.8*0.4 + 0.8*0.4 + 0.8*0.2 = 0.8 -> round(0.8*100) = 80. The expected value here was
+  // previously wrong (83) -- corrected to match the actual (correct) implementation.
+  assert('perfIndex — all inputs: sleep=80, rating=4, cals=400', computePerformanceIndex(80, 4, 400) === 80);
   assert('perfIndex — missing calories still computes', computePerformanceIndex(80, 4, null) !== null);
   assert('perfIndex — all null returns null', computePerformanceIndex(null, null, null) === null);
   assert('perfIndex — sleep only', computePerformanceIndex(100, null, null) === 100);

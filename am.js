@@ -448,12 +448,6 @@ function renderHome(root) {
   const measBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
   measBtn.innerHTML = `<span>Measurements</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
   measBtn.onclick = () => { state.view = 'measurements'; render(); };
-  // Deep-links straight into daily-routine.js's Progress/Evolution screen (?view=progress) rather
-  // than routing through Daily Routine's own landing screen first — previously reachable only one
-  // level deep (a button inside daily-routine.html), not directly from this home screen.
-  const routineProgBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
-  routineProgBtn.innerHTML = `<span>Daily Routine — Progress</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
-  routineProgBtn.onclick = () => { window.location.href = 'daily-routine.html?view=progress'; };
   // A second, plain entry point to the coach page itself (not just its Progress sub-view) —
   // this list (4-week program/Office/Q·Flow/Measurements) was the original, familiar nav before
   // Daily Routine/Squat Coach existed, so a duplicate plain link here (in addition to the two
@@ -461,7 +455,16 @@ function renderHome(root) {
   const routineLinkBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
   routineLinkBtn.innerHTML = `<span>Daily Routine</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
   routineLinkBtn.onclick = () => { window.location.href = 'daily-routine.html'; };
-  bottomLinks.append(progBtn, routineProgBtn, officeBtn, qflowBtn, routineLinkBtn, measBtn);
+  // Deep-links straight into daily-routine.js's Progress/Evolution screen (?view=progress) rather
+  // than routing through Daily Routine's own landing screen first — previously reachable only one
+  // level deep (a button inside daily-routine.html), not directly from this home screen. Grouped
+  // immediately after routineLinkBtn (not scattered elsewhere in this list, as an earlier pass
+  // had it) so the two read as one Daily Routine section — label shortened since "Daily Routine"
+  // is already established by the button directly above it.
+  const routineProgBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
+  routineProgBtn.innerHTML = `<span>Progress — Reps &amp; Quality</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
+  routineProgBtn.onclick = () => { window.location.href = 'daily-routine.html?view=progress'; };
+  bottomLinks.append(progBtn, officeBtn, qflowBtn, routineLinkBtn, routineProgBtn, measBtn);
 
   const phraseCard = el('div', `padding:12px 0;`);
   const phraseText = el('div', `font-family:"Instrument Serif",serif;font-size:20px;font-style:italic;line-height:1.35;color:${T.sub};`);
