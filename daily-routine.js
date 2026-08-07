@@ -532,8 +532,8 @@ function updateChip(chipEl, score) {
   const bad = score != null && score <= 4;
   chipEl._val.textContent = score == null ? '—' : String(score);
   chipEl._box.style.background = good ? T.accent : bad ? WARN_COLOR : T.pill;
-  chipEl._val.style.color = good ? T.accentT : bad ? '#fff' : T.fg;
-  chipEl._lbl.style.color = good ? T.accentT : bad ? '#fff' : T.mono;
+  chipEl._val.style.color = good ? T.accentT : T.fg;
+  chipEl._lbl.style.color = good ? T.accentT : bad ? T.fg : T.mono;
 }
 
 // ─────────────────────────────────────────────────────
@@ -604,7 +604,7 @@ function startOfWeek(d) {
 function qualityCellStyle(entry) {
   if (!entry) return { bg: T.pill, fg: T.mono };
   if (entry.avgQuality == null) return { bg: withAlpha(T.accent, 0.3), fg: T.fg };
-  if (entry.avgQuality <= 4) return { bg: WARN_COLOR, fg: '#fff' };
+  if (entry.avgQuality <= 4) return { bg: WARN_COLOR, fg: T.fg };
   const opacity = clamp(0.35 + ((entry.avgQuality - 5) / 5) * 0.65, 0.35, 1);
   return { bg: withAlpha(T.accent, opacity), fg: entry.avgQuality >= 7.5 ? T.accentT : T.fg };
 }

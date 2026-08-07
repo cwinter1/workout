@@ -194,9 +194,9 @@ function updateChip(chipEl, score) {
   const bad = score != null && score <= 4;
   chipEl._val.textContent = score == null ? '—' : String(score);
   chipEl._box.style.background = good ? T.accent : bad ? WARN_COLOR : T.pill;
-  chipEl._val.style.color = good ? T.accentT : bad ? '#fff' : T.fg;
+  chipEl._val.style.color = good ? T.accentT : T.fg;
   const lbl = chipEl.firstChild;
-  if (lbl) lbl.style.color = good ? T.accentT : bad ? '#fff' : T.mono;
+  if (lbl) lbl.style.color = good ? T.accentT : bad ? T.fg : T.mono;
 }
 
 function updateLiveChips(rep) {
