@@ -122,17 +122,25 @@ function renderCamera() {
   const topBar = el('div', `position:absolute;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top,12px) + 10px) 16px 10px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(${T.bg}cc, transparent);`);
   const topRow = el('div', `display:flex;align-items:center;justify-content:space-between;gap:10px;`);
   const backBtn = navBackButton();
-  const repCounter = el('div', `font-family:${T.mono_ff};font-size:13px;color:${T.fg};letter-spacing:1px;`);
+  const titleLbl = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:1.5px;text-transform:uppercase;text-align:center;flex:1;`);
+  titleLbl.textContent = 'Squat Coach';
+  topRow.append(backBtn, titleLbl, el('div', 'width:36px;'));
+
+  // The live rep count is the single most important thing to read at a glance — sized to match
+  // daily-routine.js's equivalent live counter (progressEl, 72px), since the phone is propped up
+  // a few feet away during a set here too, not held close.
+  const repCounter = el('div', `font-family:${T.display};font-weight:700;font-size:72px;text-align:center;color:${T.fg};line-height:1.05;`);
   repCounterEl = repCounter;
   updateRepCounterText();
-  topRow.append(backBtn, repCounter, el('div', 'width:36px;'));
 
   const chipsRow = el('div', `display:flex;gap:6px;`);
   const mkChip = (label) => {
     const chip = el('div', `flex:1;background:${T.pill};border-radius:4px;padding:8px 6px;text-align:center;`);
-    const lbl = el('div', `font-family:${T.mono_ff};font-size:8px;color:${T.mono};letter-spacing:1px;text-transform:uppercase;`);
+    // white-space:nowrap+ellipsis is a safety net against wrapping to 2 lines on a narrow phone
+    // (e.g. iPhone SE, 375px) — "Stability" at 11px is close to the chip's available width there.
+    const lbl = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.mono};letter-spacing:1px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`);
     lbl.textContent = label;
-    const val = el('div', `font-family:${T.display};font-weight:700;font-size:16px;margin-top:2px;`);
+    const val = el('div', `font-family:${T.display};font-weight:700;font-size:24px;margin-top:2px;`);
     val.textContent = '—';
     chip.append(lbl, val);
     chip._val = val; chip._box = chip;
@@ -143,28 +151,28 @@ function renderCamera() {
   chipsRow.append(chipRom, chipStability, chipSpeed, chipForm);
   chipsRow.style.display = state.setActive ? 'flex' : 'none';
 
-  const framePrompt = el('div', `font-family:${T.mono_ff};font-size:11px;color:${T.fg};letter-spacing:1px;text-align:center;background:${T.pill};border-radius:6px;padding:10px;`);
+  const framePrompt = el('div', `font-family:${T.mono_ff};font-size:15px;color:${T.fg};letter-spacing:1px;text-align:center;background:${T.pill};border-radius:6px;padding:10px;`);
   framePrompt.textContent = 'Get in frame, step back so your full body is visible.';
   framePromptEl = framePrompt;
   framePrompt.style.display = (!state.poseReady && !state.setActive) ? 'block' : 'none';
 
-  topBar.append(topRow, chipsRow, framePrompt);
+  topBar.append(topRow, repCounter, chipsRow, framePrompt);
 
-  const debugBox = el('div', `position:absolute;top:120px;left:16px;right:16px;font-family:${T.mono_ff};font-size:10px;color:${T.accent};background:${T.bg}dd;border-radius:6px;padding:8px;line-height:1.6;display:${state.debug ? 'block' : 'none'};`);
+  const debugBox = el('div', `position:absolute;top:140px;left:16px;right:16px;font-family:${T.mono_ff};font-size:10px;color:${T.accent};background:${T.bg}dd;border-radius:6px;padding:8px;line-height:1.6;display:${state.debug ? 'block' : 'none'};`);
   debugEl = debugBox;
 
   const bottomBar = el('div', `position:absolute;left:0;right:0;bottom:0;padding:10px 16px calc(env(safe-area-inset-bottom,14px) + 10px);display:flex;flex-direction:column;gap:10px;background:linear-gradient(transparent, ${T.bg}cc);`);
-  const feedback = el('div', `font-family:${T.mono_ff};font-size:12px;color:${T.sub};text-align:center;min-height:16px;`);
+  const feedback = el('div', `font-family:${T.mono_ff};font-size:19px;font-weight:600;color:${T.sub};text-align:center;min-height:24px;line-height:1.3;`);
   feedbackEl = feedback;
 
-  const beginBtn = el('button', `appearance:none;border:none;background:${T.accent};color:${T.accentT};border-radius:6px;padding:16px;font-family:${T.display};font-weight:700;font-size:15px;letter-spacing:0.5px;text-transform:uppercase;width:100%;opacity:${state.poseReady ? '1' : '0.4'};`);
+  const beginBtn = el('button', `appearance:none;border:none;background:${T.accent};color:${T.accentT};border-radius:6px;padding:18px;font-family:${T.display};font-weight:700;font-size:19px;letter-spacing:0.5px;text-transform:uppercase;width:100%;opacity:${state.poseReady ? '1' : '0.4'};`);
   beginBtn.textContent = 'Begin Set';
   beginBtn.disabled = !state.poseReady;
   beginBtn.onclick = beginSet;
   beginSetBtn = beginBtn;
   beginBtn.style.display = state.setActive ? 'none' : 'block';
 
-  const finishBtn = el('button', `appearance:none;border:1px solid ${T.hairline};background:transparent;color:${T.fg};border-radius:6px;padding:16px;font-family:${T.display};font-weight:700;font-size:15px;letter-spacing:0.5px;text-transform:uppercase;width:100%;`);
+  const finishBtn = el('button', `appearance:none;border:1px solid ${T.hairline};background:transparent;color:${T.fg};border-radius:6px;padding:18px;font-family:${T.display};font-weight:700;font-size:19px;letter-spacing:0.5px;text-transform:uppercase;width:100%;`);
   finishBtn.textContent = 'Finish Set';
   finishBtn.onclick = finishSet;
   finishSetBtn = finishBtn;

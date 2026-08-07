@@ -37,7 +37,7 @@ As of the Daily Routine addition, this is a 14-file static site, not a single `i
 | `form-coach-engine.js` | Exercise-agnostic camera/pose form-coaching engine shared by `squat-coach.js` and `daily-routine.js`: pure math, the generic rep-detection FSM, generic rep scorers, the hold-based tracker (static exercises), the camera/pose lifecycle (one shared `Pose` instance), `WARN_COLOR`. See `memory/form_coach.md` |
 | `exercise-squat.js` / `exercise-pushup.js` / `exercise-lunge.js` / `exercise-plank.js` | Each exercise's own config + scoring, built on `form-coach-engine.js`'s generics. Loaded by whichever page(s) need that exercise. See `memory/form_coach.md` |
 | `squat-coach.html` / `squat-coach.js` | Standalone single-exercise camera form coach — fully self-contained, own `state`/`render()`. Sits entirely outside the session-engine "contract" below, since it's continuous camera analysis, not a phase/timer timeline. See `memory/form_coach.md` |
-| `daily-routine.html` / `daily-routine.js` | The fixed, same-every-day 9-step camera-coached routine (warmup → 2× push-ups/squats/plank → lunges → cooldown) — sequences all 4 exercises inside ONE continuous camera session. Also outside the session-engine contract; has its own persistence key (`mf.dailyRoutine`, a calendar-date completion log, not the AM/Office week/day shape). See `memory/daily_routine.md` |
+| `daily-routine.html` / `daily-routine.js` | The fixed, same-every-day 9-step camera-coached routine (warmup → 2× push-ups/squats/plank → lunges → cooldown) — sequences all 4 exercises inside ONE continuous camera session, prefaced by a one-time camera-placement setup check (confirms one fixed phone spot tracks both standing and floor poses). Also outside the session-engine contract; has its own persistence key (`mf.dailyRoutine`, a calendar-date completion log, not the AM/Office week/day shape) and its own Progress/Evolution screen (a bespoke calendar-date quality heatmap, reps + quality + rate over time — not a reuse of `shared.js`'s week×day `renderProgressGrid()`, which doesn't fit this feature's date-only data model). See `memory/daily_routine.md` and `memory/form_coach.md` |
 
 **Why this shape, not ES modules or a bundler:** `index.html`, `office.html`, `squat-coach.html`, and `daily-routine.html` are independent pages linked by plain `<a>`/`window.location` navigation (a real page load, not an in-app view switch) — see `memory/architecture_decisions.md` for the full reasoning and the "contract" functions (`currentDay()`, `nextSession()`, `buildSessionTimeline()`, `pickDoneMessage()`, `PROGRESS_PREFIX`, `TOTAL_SESSIONS`) each timed-program page-specific file must define before `shared.js`'s generic engine functions are called. Neither `squat-coach.js` nor `daily-routine.js` implements this contract — neither has a phase/timer timeline to hand off to `shared.js`'s engine.
 
@@ -117,11 +117,14 @@ Style rules:
 - `height:100dvh` on root — dynamic viewport height, essential for iOS Safari
 - Page transition: `animation:rise .25s ease` on every `render()` call
 
-Do not introduce colors outside the T object. **One documented exception**: `form-coach-engine.js`
+Do not introduce colors outside the T object. **Two documented exceptions**: `form-coach-engine.js`
 defines its own `WARN_COLOR` (not added to `T`) for a red "you're doing this wrong" state, used by
 every camera form-coach feature (Squat Coach, Daily Routine) on live feedback, score chips, and
 summary stats — a feature-specific, explicitly-requested exception, not a change to the shared
-design system used by AM/Office. See `memory/form_coach.md`.
+design system used by AM/Office. `daily-routine.js`'s `withAlpha(hex, alpha)` (hex → rgba string)
+is a narrower second exception used only to shade `T.accent`/`WARN_COLOR` into the Progress
+screen's quality-heatmap grid — it varies opacity only, introduces no new hue, so it's a lesser
+exception than `WARN_COLOR` rather than a second independent one. See `memory/form_coach.md`.
 
 ---
 

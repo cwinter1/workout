@@ -63,6 +63,24 @@ contract" section for the full reasoning (the iOS Safari risk of detaching a liv
 One Pose instance is reused for the whole routine too (`form-coach-engine.js`'s `ensurePose()`),
 not recreated per exercise — avoids re-loading the WASM model up to 8 times in 20 minutes.
 
+`stopCamera()` (called on `pagehide` and the back button, in addition to `finishRoutine()`) also
+clears the active step timer (`clearTimerInterval()`), not just the camera/pose loop — a gap a
+review round caught: backgrounding the app mid-`'timer'`-kind step (warmup/cooldown) used to leave
+the countdown `setInterval` running after the camera died, which could still fire
+`finishCurrentStep()` → `enterStep()` against a dead camera stream with no way to resume.
+
+## Camera setup check — runs once, before step 0
+
+Chris: "a real case where the camera/phone is in one place will be ok for plank or I will need to
+refocus... maybe a quick test/check that all is set ok." The routine alternates repeatedly between
+standing exercises (squat/lunge) and floor exercises (push-up/plank), and there's no practical way
+to reposition the phone mid-routine — so `enterSetupCheck()` runs once, before step 0, confirming
+the SAME fixed placement can track both a standing pose and a floor pose before committing to it
+for the full 20 minutes. See `memory/form_coach.md`'s "Camera setup check" section for the full
+design (confirm-streak mechanics, the live progress indicator, the trouble hint, and why it never
+blocks — "Skip Setup Check" is always available, same escape-hatch philosophy as "Skip This Step"
+below).
+
 ## Always-available "Skip This Step" — an explicit escape hatch
 
 Every step (including the two timer-only ones) has a persistent "Skip This Step" button, separate
@@ -82,27 +100,44 @@ normally.
   date: 'YYYY-MM-DD',  // dateKey(), from shared.js
   completed: true,      // always true — an entry only exists if the routine was completed
   at: timestamp,
-  results: [             // one entry per step, for the Done screen and future trend views
+  results: [             // one entry per step, for the Done screen and the Progress screen
     { label: 'Push-Ups', kind: 'reps', target: 20, completedReps: 20, overall: 7.1, skipped: false },
     { label: 'Plank', kind: 'hold', target: 60, heldSeconds: 60, overall: 7.0, skipped: false },
     { label: 'Warm-up', kind: 'timer', skipped: false },
     // ...
   ],
+  // Added for the Progress/Evolution screen (Chris: "how many reps, evaluation... projection,
+  // track and see evolution") — computed once at save time by computeDayStats(results) rather
+  // than recomputed from `results` on every render.
+  totalReps: 45,         // sum of completedReps across every 'reps'-kind step that day
+  totalHoldSeconds: 105, // sum of heldSeconds across every 'hold'-kind step that day
+  avgQuality: 7.4,       // mean `overall` across every scored step; null if nothing was scorable
 }
 ```
 
 This is a **new, dedicated key** — not folded into `mf.progress`/`mf.sessions` (the AM/Office
 week-and-day-indexed shape) the way Office's data shares those keys via a prefix. There's no
 week/day dimension here at all, just calendar dates, so a new key matches Q·Flow's own precedent
-of using its own prefix rather than forcing a mismatched shape into the existing one.
+of using its own prefix rather than forcing a mismatched shape into the existing one. This is also
+why the Progress/Evolution screen (`renderProgress()`) is a new bespoke calendar-date grid rather
+than a reuse of `shared.js`'s week×day `renderProgressGrid()` — see `memory/form_coach.md`'s
+"Progress / Evolution screen" section for the full reasoning.
 
 **A day only gets an entry if the routine was completed end-to-end** (`finishRoutine()`, reached
 by advancing past the last step — whether each individual step along the way was fully completed
 or skipped). Backing out early via the close button records nothing — this is a deliberate,
 literal reading of Chris's own rule ("just check off daily, yes/no"): the completion log is a
 calendar-date yes/no signal, not a partial-credit or per-rep score archive. The `results` array is
-still saved alongside it (already computed, genuinely useful for the Done screen and a future
-"how am I trending" view) but is not itself the source of truth for the streak.
+still saved alongside it (already computed, genuinely useful for the Done screen and the Progress
+screen) but is not itself the source of truth for the streak.
+
+**A skipped step with zero real progress is unscored, consistently across both step kinds.** A
+skipped `'reps'` step with 0 completed reps gets `overall: null` (excluded from `avgQuality`). A
+`'hold'` step used to get a real numeric `overall` from `scoreHold()` even at `heldSeconds: 0`
+(e.g. skipped before ever getting into position) — a review round caught this inconsistency (the
+same "skipped before doing anything" case scored two different ways depending on step kind, which
+would skew the evolution trend), so `summarizeStep()` now also treats a zero-active-time hold as
+`overall: null`.
 
 ## Streak calculation
 
@@ -111,6 +146,15 @@ today or yesterday) but is a fresh, small implementation scoped to `mf.dailyRout
 date-string array, since `getStreak()` itself works off `mf.sessions`' week/day-keyed records and
 timestamp-based day extraction — not a natural fit to reuse here without more contortion than just
 writing the ~15-line equivalent directly against plain date strings.
+
+Its day-diffing (`daysBetween()`) is deliberately **not** raw millisecond subtraction between `Date`
+objects — a first version mixed a UTC-parsed date string (`new Date('2026-08-06')` parses as UTC
+midnight) against a local-midnight `Date` object (`new Date(); .setHours(0,0,0,0)`), which disagree
+by Israel's UTC offset even before accounting for DST, and additionally assumed every calendar day
+is exactly 24h (false on the two nights/year DST actually shifts, which matters for a
+Israel-only app). Fixed by parsing each `'YYYY-MM-DD'` string into y/m/d components and diffing them
+as `Date.UTC(...)` day-numbers instead — immune to both the offset mismatch and DST, since it never
+constructs a local-time `Date` at all.
 
 ## Exercise-specific landmark generators needed for real synthetic testing
 
@@ -133,3 +177,11 @@ sandbox's proxy blocks the MediaPipe CDN entirely, so the real library's global 
 unverified until a real device test — everything else about this feature, including the full
 9-step sequence and the persistence/streak logic, was verified end-to-end in this sandbox with
 MediaPipe stubbed).
+
+## QA process for future changes
+
+Chris asked for future changes to this feature to go through a repeatable multi-persona review
+(frontend/backend/architect/qa/project-manager), not a one-off — see
+`.claude/skills/form-coach-qa-review/SKILL.md` for the process itself, and
+`memory/form_coach.md`'s "Distance-readable sizing"/"Camera setup check"/"Progress / Evolution
+screen" sections for what the most recent round actually found and fixed.

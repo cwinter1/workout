@@ -128,8 +128,8 @@ just a visual blip. `squat-coach.js` only has one "screen" this applies to (the 
 the duration of one set). `daily-routine.js` is stricter still: the **entire 9-step routine** runs
 inside one continuously-live camera session — `render()` is called exactly once (`startRoutine()`)
 and never again until the routine ends (`finishRoutine()`, where the camera is deliberately
-stopped and a real `render()` is safe again). Step transitions call `updateStepUI`-style direct
-node patches (`enterStep()`), not `render()` — verified end-to-end in this sandbox (a headless
+stopped and a real `render()` is safe again). Step transitions call `enterStep()`-style direct
+node patches, not `render()` — verified end-to-end in this sandbox (a headless
 browser check confirmed the `<video>` DOM node's identity is preserved across all 9 step
 transitions, not recreated).
 
@@ -229,7 +229,75 @@ drifting out of sync with what actually ships. Covers: the engine's pure math an
 the generic rep FSM (including the jitter-debounce and slow-descent-regression cases) exercised
 through squat's own landmark shape, the hold-tracker (`newHold`/`tickHold`/`scoreHold`), and each
 of the 4 exercises' own config/scoring/live-check functions including a full synthetic FSM cycle
-per rep-based exercise. 48 assertions as of this writing. Camera/MediaPipe integration itself stays
-out of scope, matching `session-flow.html`'s own precedent of testing pure logic only — the
-camera/routine-sequencing *wiring* itself was verified separately via headless-browser runs with
-MediaPipe stubbed (see "Testing limitation" above), not as part of this pure-logic suite.
+per rep-based exercise, plus (as of the camera-setup-check/progress-screen round below)
+`daily-routine.js`'s pure persistence/progress-grid helpers — `computeDayStats`, `withAlpha`,
+`qualityCellStyle`, `dailyRoutineAllTimeStats`, `dailyRoutineStreak`. 67 assertions as of this
+writing (up from 48; `daily-routine.js`'s trailing `render()` call is harmless in this test
+context since it only reaches the camera-free landing screen). Camera/MediaPipe integration itself
+stays out of scope, matching `session-flow.html`'s own precedent of testing pure logic only — the
+camera/routine-sequencing *wiring* (setup check, step sequencing, screen transitions) is instead
+verified via an ad hoc headless-Playwright harness during each review round (stub `Pose`/
+`getUserMedia`/`startFrameLoop`, drive frames by hand) rather than folded into this suite, and via
+real Tier 2 device checks — see `.claude/skills/form-coach-qa-review/SKILL.md` for the full
+process, added specifically so this multi-persona review became a repeatable practice rather than
+a one-off.
+
+## Distance-readable sizing on the live camera screen (Chris: "the human eye can't see things
+bright... make it human usage right size")
+
+The phone is propped up a few feet away during a set, not held close — the original font sizes
+(borrowed from the rest of the app's normal-reading-distance UI) were too small to read at a
+glance mid-rep. Both `squat-coach.js` and `daily-routine.js` now size their live-read elements
+much larger: the primary rep/hold counter (`daily-routine.js`'s `progressEl`, `squat-coach.js`'s
+`repCounterEl`) at 72px, live corrective feedback text at 19px, chip values at 24px. `progressEl`
+shrinks dynamically for the longer hold-format string (`"0:00 / 1:00"`, up to 11 characters) via
+`setProgressText()` rather than risking a wrap/clip at a fixed 72px — anything ≤7 chars stays at
+72px, ≤9 chars drops to 56px, longer drops to 44px. Chip labels got a `white-space:nowrap` +
+ellipsis safety net against wrapping on a narrow (375px, iPhone SE-class) viewport, where a 4-chip
+row with an 11px label like "Stability" has little margin to spare.
+
+## Camera setup check — one fixed placement, standing AND floor
+
+Chris's concern: "a real case where the camera/phone is in one place will be ok for plank or I
+will need to refocus" — the routine alternates between standing exercises (squat/lunge) and floor
+exercises (push-up/plank) with no practical way to reposition the phone mid-routine, so a bad
+placement wouldn't surface until minutes in. `daily-routine.js`'s `enterSetupCheck()` runs once,
+before step 0: confirms a standing pose is trackable (`SETUP_CONFIRM_STREAK = 12` consecutive
+frames with core-landmark visibility > 0.5), then the same for a floor pose at the same spot, then
+auto-advances into the routine. A live count on the active phase's chip (mirroring the number of
+consecutive good frames so far) gives continuous visible progress rather than nothing changing for
+several seconds; an "having trouble" hint in `WARN_COLOR` appears after `SETUP_TROUBLE_MS = 8000`ms
+without a confirm, but never blocks — "Skip Setup Check" is always available, matching the
+routine's existing "no getting stuck" design goal (see `memory/daily_routine.md`'s "Always-available
+Skip This Step" section). Reuses the same shell nodes as step 0 (chips repurposed as
+Standing/Floor indicators) rather than building new DOM, respecting the "never call `render()`
+again once the camera is live" rule above.
+
+## Progress / Evolution screen — reps, quality, and rate over time
+
+Chris: "At the end I get how many reps, evaluation. This allows to see the projection, track and
+see evolution" plus "use week progress path but change the colour ... not only done also quality
+and quantity and add rate." `daily-routine.js`'s `renderProgress()` is a new screen (reachable from
+the landing screen), showing: a stat grid (day streak, days completed, total reps, average quality
+rate) and an 8-week, 7-column calendar heatmap where each day's cell is colored via
+`qualityCellStyle()` — not-done stays the neutral `T.pill`, done-but-unscored gets a dim flat
+accent tint, done with `avgQuality <= 4` is solid `WARN_COLOR`, and everything from 5-10 shades
+`T.accent` from a faint tint up to fully solid via the new `withAlpha(hex, alpha)` helper (hex →
+rgba string, only opacity varies — no new hue, so this stays inside the "no colors outside `T`"
+rule the same minimal way `WARN_COLOR` already does).
+
+This is a **new, bespoke grid**, not a literal reuse of `shared.js`'s `renderProgressGrid()` (the
+AM/Office week×day grid) — that component is keyed by week 1-4 × day 0-2, a shape Daily Routine's
+calendar-date-only persistence (see `memory/daily_routine.md`) doesn't have. Forcing the existing
+component in would have meant fitting a mismatched shape rather than honoring "use the CSS in the
+site as base" (which the new screen does — `T` tokens + `el()` only, no new styling system).
+Reviewed and confirmed as the right call during the multi-persona QA round (architect: consistent;
+project-manager: a defensible reinterpretation, flagged for confirmation with Chris rather than
+treated as a silent gap).
+
+`computeDayStats(results)` computes `totalReps`/`totalHoldSeconds`/`avgQuality` once at save time
+(stored on the `mf.dailyRoutine` entry — see `memory/daily_routine.md`'s persistence section for
+the full shape). `avgQuality` is `null`, not `0`, when nothing that day was actually scorable — a
+skipped hold step with zero active time is now treated the same as a skipped reps step with zero
+completed reps (both `overall: null`, excluded from the average) after a review round caught the
+two being scored inconsistently.

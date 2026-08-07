@@ -17,16 +17,23 @@
 <h2>Form Coach Flow QA</h2>
 <p style="color:#888;font-size:13px;max-width:600px;">Pure-logic only — form-coach-engine.js's
 generic math/FSM/scoring/hold-tracker, plus each of the 4 exercises' (squat/push-up/lunge/plank)
-own config and scoring. No MediaPipe, no camera, no DOM beyond this page's own test runner —
-supersedes the old tests/squat-coach-flow.html now that the engine is shared across exercises.</p>
+own config and scoring, plus daily-routine.js's pure persistence/progress-grid helpers
+(computeDayStats/withAlpha/qualityCellStyle). No MediaPipe, no camera — supersedes the old
+tests/squat-coach-flow.html now that the engine is shared across exercises. daily-routine.js is
+loaded for its pure functions only; its trailing `render()` call is harmless here since the
+landing screen touches no camera/MediaPipe API, but this file still isn't a substitute for the
+Tier 2 real-device check (see memory/daily_routine.md's testing-limitation section).</p>
 <div id="results"></div>
 <div id="summary"></div>
+<div id="root" style="display:none;"></div>
 
+<script src="../shared.js"></script>
 <script src="../form-coach-engine.js"></script>
 <script src="../exercise-squat.js"></script>
 <script src="../exercise-pushup.js"></script>
 <script src="../exercise-lunge.js"></script>
 <script src="../exercise-plank.js"></script>
+<script src="../daily-routine.js"></script>
 <script>
 // ── Test runner ────────────────────────────────────────────────────────────────
 let passed = 0, failed = 0;
@@ -339,6 +346,81 @@ function makePlankLandmarks(devAmount) {
   const sagScored = scoreHold(sagHold, 60000, PLANK_EXERCISE);
   const sagFb = plankFeedback(sagScored);
   assert('plank: a consistently sagging hold gets a warn summary mentioning sag', sagFb.warn === true && sagFb.text === PLANK_EXERCISE.issueLines.sag, `text="${sagFb.text}"`);
+})();
+
+// ═══════════════════════════════════════════════════════
+// DAILY ROUTINE — pure persistence/progress-grid helpers (computeDayStats/withAlpha/
+// qualityCellStyle/dailyRoutineAllTimeStats/dailyRoutineStreak). Uses real localStorage (this
+// file runs in an actual browser), cleared before each block so tests don't see each other's data.
+// ═══════════════════════════════════════════════════════
+(function testComputeDayStats() {
+  const mixed = computeDayStats([
+    { kind: 'reps', completedReps: 20, overall: 8 },
+    { kind: 'reps', completedReps: 15, overall: 6 },
+    { kind: 'hold', heldSeconds: 60, overall: 9 },
+    { kind: 'timer' },
+  ]);
+  assert('computeDayStats — totalReps sums only reps-kind steps', mixed.totalReps === 35, `got ${mixed.totalReps}`);
+  assert('computeDayStats — totalHoldSeconds sums only hold-kind steps', mixed.totalHoldSeconds === 60, `got ${mixed.totalHoldSeconds}`);
+  assert('computeDayStats — avgQuality averages every scored step regardless of kind', mixed.avgQuality === 7.7, `got ${mixed.avgQuality}`);
+
+  const nothingScorable = computeDayStats([{ kind: 'timer' }, { kind: 'timer' }]);
+  assert('computeDayStats — avgQuality is null (not 0) when nothing was scorable', nothingScorable.avgQuality === null, `got ${nothingScorable.avgQuality}`);
+
+  const empty = computeDayStats([]);
+  assert('computeDayStats — an empty results array is zero reps/hold and null quality', empty.totalReps === 0 && empty.totalHoldSeconds === 0 && empty.avgQuality === null);
+})();
+
+(function testWithAlpha() {
+  assert('withAlpha — converts T.accent to the expected rgba string', withAlpha('#7aa676', 0.5) === 'rgba(122,166,118,0.5)', `got ${withAlpha('#7aa676', 0.5)}`);
+  assert('withAlpha — alpha 1 stays fully opaque', withAlpha('#c9564a', 1) === 'rgba(201,86,74,1)', `got ${withAlpha('#c9564a', 1)}`);
+})();
+
+(function testQualityCellStyle() {
+  const notDone = qualityCellStyle(null);
+  assert('qualityCellStyle — no entry (not done) uses the neutral pill background', notDone.bg === T.pill, `got ${notDone.bg}`);
+
+  const unscored = qualityCellStyle({ avgQuality: null });
+  assert('qualityCellStyle — done but unscored is a dim, distinct accent tint (not the pill, not a real score color)', unscored.bg === withAlpha(T.accent, 0.3), `got ${unscored.bg}`);
+
+  const poor = qualityCellStyle({ avgQuality: 4 });
+  assert('qualityCellStyle — avgQuality<=4 uses WARN_COLOR solid', poor.bg === WARN_COLOR, `got ${poor.bg}`);
+
+  const midGood = qualityCellStyle({ avgQuality: 5 });
+  const veryGood = qualityCellStyle({ avgQuality: 10 });
+  assert('qualityCellStyle — score 5 is a faint accent tint', midGood.bg === withAlpha(T.accent, 0.35), `got ${midGood.bg}`);
+  assert('qualityCellStyle — score 10 is a fully solid accent tint', veryGood.bg === withAlpha(T.accent, 1), `got ${veryGood.bg}`);
+})();
+
+(function testDailyRoutineAllTimeStatsAndStreak() {
+  localStorage.removeItem('mf.dailyRoutine');
+  assert('dailyRoutineAllTimeStats — no data yet is all zero/null', (() => {
+    const s = dailyRoutineAllTimeStats();
+    return s.daysCompleted === 0 && s.totalReps === 0 && s.avgQuality === null;
+  })());
+  assert('dailyRoutineStreak — no data yet is 0', dailyRoutineStreak() === 0);
+
+  const today = dateKey();
+  const yesterday = dateKey(Date.now() - 86400000);
+  const twoDaysAgo = dateKey(Date.now() - 2 * 86400000);
+  saveDailyRoutine([
+    { date: twoDaysAgo, completed: true, totalReps: 50, avgQuality: 6 },
+    { date: yesterday, completed: true, totalReps: 60, avgQuality: 8 },
+    { date: today, completed: true, totalReps: 40, avgQuality: null },
+  ]);
+  const totals = dailyRoutineAllTimeStats();
+  assert('dailyRoutineAllTimeStats — daysCompleted counts every completed entry', totals.daysCompleted === 3, `got ${totals.daysCompleted}`);
+  assert('dailyRoutineAllTimeStats — totalReps sums across all days', totals.totalReps === 150, `got ${totals.totalReps}`);
+  assert('dailyRoutineAllTimeStats — avgQuality averages only days with a real score, excluding null', totals.avgQuality === 7, `got ${totals.avgQuality}`);
+  assert('dailyRoutineStreak — 3 consecutive days ending today is a streak of 3', dailyRoutineStreak() === 3, `got ${dailyRoutineStreak()}`);
+
+  saveDailyRoutine([
+    { date: twoDaysAgo, completed: true, totalReps: 50, avgQuality: 6 },
+    { date: today, completed: true, totalReps: 40, avgQuality: 7 },
+  ]);
+  assert('dailyRoutineStreak — a gap day breaks the streak down to 1', dailyRoutineStreak() === 1, `got ${dailyRoutineStreak()}`);
+
+  localStorage.removeItem('mf.dailyRoutine');
 })();
 
 // ═══════════════════════════════════════════════════════
