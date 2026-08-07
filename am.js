@@ -391,6 +391,40 @@ function renderHome(root) {
   beginBtn.append(beginL, beginR);
   beginBtn.onclick = startSession;
 
+  // Daily Routine — the fixed, same-every-day 20-minute strength sequence (added after Squat
+  // Form Coach, but placed first/most prominent since it's now the primary daily practice).
+  // Filled accent background (matching beginBtn's visual weight), not the outlined style used by
+  // squatCard/the plain nav links below — a deliberate visual signal that this is the thing to
+  // reach for each morning, not just another linked page.
+  const routineCard = el('button', `appearance:none;border:none;background:${T.accent};color:${T.accentT};border-radius:6px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;width:100%;`);
+  const routineCardL = el('div', ``);
+  const routineCardTitle = el('div', `font-family:${T.display};font-weight:700;font-size:15px;text-transform:uppercase;letter-spacing:0.5px;`);
+  routineCardTitle.textContent = 'Daily Routine';
+  const routineCardSub = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.accentT};opacity:0.75;letter-spacing:1px;margin-top:4px;`);
+  routineCardSub.textContent = 'Push-ups, squats, plank, lunges — camera-coached';
+  routineCardL.append(routineCardTitle, routineCardSub);
+  const routineCardIcon = el('span', `opacity:0.8;flex-shrink:0;`);
+  routineCardIcon.innerHTML = iconArrow(T.accentT);
+  routineCard.append(routineCardL, routineCardIcon);
+  routineCard.onclick = () => { window.location.href = 'daily-routine.html'; };
+
+  // Squat Form Coach — placed right under Begin so it's visible without scrolling (previously
+  // buried at the bottom of bottomLinks, below Program/Office/Q·Flow/Measurements, which read as
+  // "no link" to a quick glance). Styled with an accent border, not the plain hairline used by
+  // the other nav links below, since it's a distinct feature (a live camera tool), not another
+  // page in the same "browse my program" family as Program/Measurements.
+  const squatCard = el('button', `appearance:none;border:1px solid ${T.accent};background:transparent;color:${T.fg};border-radius:6px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;width:100%;`);
+  const squatCardL = el('div', ``);
+  const squatCardTitle = el('div', `font-family:${T.display};font-weight:700;font-size:15px;text-transform:uppercase;letter-spacing:0.5px;`);
+  squatCardTitle.textContent = 'Squat Form Coach';
+  const squatCardSub = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:1px;margin-top:4px;`);
+  squatCardSub.textContent = 'Camera-based rep scoring';
+  squatCardL.append(squatCardTitle, squatCardSub);
+  const squatCardIcon = el('span', `opacity:0.8;flex-shrink:0;`);
+  squatCardIcon.innerHTML = iconArrow(T.accent);
+  squatCard.append(squatCardL, squatCardIcon);
+  squatCard.onclick = () => { window.location.href = 'squat-coach.html'; };
+
   // phase breakdown
   const phaseBreak = renderPhaseChips(day);
 
@@ -414,17 +448,14 @@ function renderHome(root) {
   const measBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
   measBtn.innerHTML = `<span>Measurements</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
   measBtn.onclick = () => { state.view = 'measurements'; render(); };
-  const squatBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
-  squatBtn.innerHTML = `<span>Squat Form Coach</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
-  squatBtn.onclick = () => { window.location.href = 'squat-coach.html'; };
-  bottomLinks.append(progBtn, officeBtn, qflowBtn, measBtn, squatBtn);
+  bottomLinks.append(progBtn, officeBtn, qflowBtn, measBtn);
 
   const phraseCard = el('div', `padding:12px 0;`);
   const phraseText = el('div', `font-family:"Instrument Serif",serif;font-size:20px;font-style:italic;line-height:1.35;color:${T.sub};`);
   phraseText.textContent = HOME_PHRASES[totalDone % HOME_PHRASES.length];
   phraseCard.appendChild(phraseText);
 
-  pad.append(eyebrow, titleWrap, phraseCard, sleepCard, beginBtn, phaseBreak, weekSection, progGrid, bottomLinks, el('div', `height:40px;`));
+  pad.append(eyebrow, titleWrap, phraseCard, sleepCard, beginBtn, routineCard, squatCard, phaseBreak, weekSection, progGrid, bottomLinks, el('div', `height:40px;`));
   scroll.appendChild(pad);
   root.appendChild(scroll);
 }

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0e1116">
-<title>Squat Form Coach</title>
+<title>Daily Routine</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -19,20 +19,20 @@ button { font-family: inherit; cursor: pointer; }
 <div id="root" style="height:100dvh;display:flex;flex-direction:column;position:relative;overflow:hidden;"></div>
 
 <!--
-  Legacy MediaPipe Pose "Solutions" API — classic <script src> globals (Pose, drawConnectors,
-  drawLandmarks, POSE_CONNECTIONS), not the newer ES-module-only Tasks Vision API, to stay
-  consistent with this repo's no-ES-modules rule. Google has frozen/deprecated this API line,
-  but jsDelivr serves published npm packages indefinitely, so the CDN files aren't going
-  anywhere. Camera capture itself is driven directly via getUserMedia in form-coach-engine.js
-  (not @mediapipe/camera_utils' Camera helper) so front/rear selection and stream teardown are
-  under our own control rather than an unverified third-party wrapper. Must load before
-  shared.js/form-coach-engine.js/squat-coach.js. See memory/form_coach.md.
+  See squat-coach.html for why the legacy MediaPipe Pose "Solutions" API (classic globals) is
+  used here instead of the newer ES-module-only Tasks Vision API, and why camera capture is
+  driven directly via getUserMedia (form-coach-engine.js) instead of @mediapipe/camera_utils'
+  Camera helper. This page reuses ONE Pose instance across all 9 routine steps (see
+  form-coach-engine.js's ensurePose) rather than re-initializing per exercise.
 -->
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 <script src="shared.js"></script>
 <script src="form-coach-engine.js"></script>
 <script src="exercise-squat.js"></script>
-<script src="squat-coach.js"></script>
+<script src="exercise-pushup.js"></script>
+<script src="exercise-lunge.js"></script>
+<script src="exercise-plank.js"></script>
+<script src="daily-routine.js"></script>
 </body>
 </html>

@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Form Coach Flow QA</title>
+<style>
+  body { font-family: monospace; background: #0f0f0f; color: #ccc; padding: 24px; }
+  h2 { color: #fff; margin: 0 0 20px; }
+  .test { padding: 8px 12px; margin: 4px 0; border-radius: 4px; font-size: 14px; }
+  .pass { background: #1a2e1a; color: #4caf50; }
+  .fail { background: #2e1a1a; color: #f44336; }
+  #summary { margin-top: 20px; font-size: 15px; color: #fff; }
+</style>
+</head>
+<body>
+<h2>Form Coach Flow QA</h2>
+<p style="color:#888;font-size:13px;max-width:600px;">Pure-logic only — form-coach-engine.js's
+generic math/FSM/scoring/hold-tracker, plus each of the 4 exercises' (squat/push-up/lunge/plank)
+own config and scoring, plus daily-routine.js's pure persistence/progress-grid helpers
+(computeDayStats/withAlpha/qualityCellStyle). No MediaPipe, no camera — supersedes the old
+tests/squat-coach-flow.html now that the engine is shared across exercises. daily-routine.js is
+loaded for its pure functions only; its trailing `render()` call is harmless here since the
+landing screen touches no camera/MediaPipe API, but this file still isn't a substitute for the
+Tier 2 real-device check (see memory/daily_routine.md's testing-limitation section).</p>
+<div id="results"></div>
+<div id="summary"></div>
+<div id="root" style="display:none;"></div>
+
+<script src="../shared.js"></script>
+<script src="../form-coach-engine.js"></script>
+<script src="../exercise-squat.js"></script>
+<script src="../exercise-pushup.js"></script>
+<script src="../exercise-lunge.js"></script>
+<script src="../exercise-plank.js"></script>
+<script src="../daily-routine.js"></script>
+<script>
+// ── Test runner ────────────────────────────────────────────────────────────────
+let passed = 0, failed = 0;
+const results = document.getElementById('results');
+
+function assert(name, condition, detail = '') {
+  const div = document.createElement('div');
+  if (condition) {
+    div.className = 'test pass';
+    div.textContent = `PASS  ${name}`;
+    passed++;
+  } else {
+    div.className = 'test fail';
+    div.textContent = `FAIL  ${name}${detail ? ' — ' + detail : ''}`;
+    failed++;
+  }
+  results.appendChild(div);
+}
+
+function pt(x, y) { return { x, y }; }
+function lm(x, y, visibility = 1) { return { x, y, visibility }; }
+
+// ═══════════════════════════════════════════════════════
+// ENGINE — pure math
+// ═══════════════════════════════════════════════════════
+(function testAngleAt() {
+  const right = angleAt(pt(0, 0), pt(0, 1), pt(1, 1));
+  assert('angleAt — right angle ≈ 90°', Math.abs(right - 90) < 0.01, `got ${right}`);
+  const straight = angleAt(pt(0, 0), pt(0, 1), pt(0, 2));
+  assert('angleAt — straight line ≈ 180°', Math.abs(straight - 180) < 0.01, `got ${straight}`);
+  const degenerate = angleAt(pt(0, 0), pt(0, 0), pt(1, 1));
+  assert('angleAt — degenerate zero-length vector returns null', degenerate === null);
+})();
+
+(function testJointInwardOffset() {
+  const shoW = 0.2;
+  const symA = jointInwardOffset(pt(0.4, 0.5), pt(0.4, 0.7), pt(0.4, 0.9), 0.5, shoW);
+  assert('jointInwardOffset — straight leg, no deviation ≈ 0', Math.abs(symA) < 0.001, `got ${symA}`);
+  const valgusA = jointInwardOffset(pt(0.4, 0.5), pt(0.46, 0.7), pt(0.4, 0.9), 0.5, shoW);
+  assert('jointInwardOffset — knee shifted toward midline flags positive', valgusA > 0.06, `got ${valgusA}`);
+  const valgusB = jointInwardOffset(pt(0.6, 0.5), pt(0.54, 0.7), pt(0.6, 0.9), 0.5, shoW);
+  assert('jointInwardOffset — orientation-agnostic (mirrored layout)', valgusB > 0.06, `got ${valgusB}`);
+})();
+
+(function testVerticalLineDeviation() {
+  const straight = verticalLineDeviation(pt(0.2, 0.3), pt(0.8, 0.7), pt(0.5, 0.5), 0.2);
+  assert('verticalLineDeviation — point exactly on the line ≈ 0', Math.abs(straight) < 0.001, `got ${straight}`);
+  const sag = verticalLineDeviation(pt(0.2, 0.3), pt(0.8, 0.7), pt(0.5, 0.6), 0.2);
+  assert('verticalLineDeviation — point below the line is positive (sag)', sag > 0, `got ${sag}`);
+  const pike = verticalLineDeviation(pt(0.2, 0.3), pt(0.8, 0.7), pt(0.5, 0.4), 0.2);
+  assert('verticalLineDeviation — point above the line is negative (pike)', pike < 0, `got ${pike}`);
+  const mirroredSag = verticalLineDeviation(pt(0.8, 0.3), pt(0.2, 0.7), pt(0.5, 0.6), 0.2);
+  assert('verticalLineDeviation — sign-stable regardless of p1->p2 direction', mirroredSag > 0, `got ${mirroredSag}`);
+})();
+
+// ═══════════════════════════════════════════════════════
+// ENGINE — generic rep FSM (using squat's landmark shape as a stand-in body, since the FSM
+// itself is exercise-agnostic — see the trackFn/scaleFn/sampleFn arguments below)
+// ═══════════════════════════════════════════════════════
+function makeSquatLandmarks(depth) {
+  const lmArr = new Array(33);
+  lmArr[LM.LSHO] = lm(0.45, 0.2); lmArr[LM.RSHO] = lm(0.55, 0.2);
+  const hipY = 0.5 + depth * 0.15;
+  lmArr[LM.LHIP] = lm(0.45, hipY); lmArr[LM.RHIP] = lm(0.55, hipY);
+  lmArr[LM.LKNEE] = lm(0.45, 0.75); lmArr[LM.RKNEE] = lm(0.55, 0.75);
+  lmArr[LM.LANK] = lm(0.45, 0.95); lmArr[LM.RANK] = lm(0.55, 0.95);
+  return lmArr;
+}
+
+(function testGenericRepFsm() {
+  const fsm = newFsm();
+  let completedCount = 0, ts = 0;
+  function feed(depth) { ts += 33; if (tickFsm(fsm, makeSquatLandmarks(depth), ts, hipCenterOf, shoulderWidthOf, squatFrameSample)) completedCount++; }
+
+  for (let i = 0; i < 10; i++) feed(0);
+  feed(0.05); // modest single-frame jitter, well under the descend threshold
+  for (let i = 0; i < 10; i++) feed(0);
+  assert('tickFsm — modest single-frame jitter does not trigger a transition', fsm.fsmState === 'standing', `fsmState=${fsm.fsmState}`);
+  assert('tickFsm — modest single-frame jitter does not complete a rep', completedCount === 0);
+
+  for (let i = 1; i <= 15; i++) feed(i / 15);
+  for (let i = 0; i < 5; i++) feed(1);
+  for (let i = 15; i >= 0; i--) feed(i / 15);
+  for (let i = 0; i < 10; i++) feed(0);
+  assert('tickFsm — one full rep cycle completes exactly one rep', completedCount === 1, `got ${completedCount}`);
+  assert('tickFsm — FSM returns to standing after the cycle', fsm.fsmState === 'standing');
+})();
+
+// Regression test for the baseline-chasing bug (see form-coach-engine.js's comment in the
+// 'standing' branch of tickFsm): a first attempted fix (gating the baseline's adaptation on a
+// small velocity threshold) only pushed the failure point out to ~3s rather than eliminating it
+// — a standalone simulation sweeping ramp speeds from 0.5s to 20s led to the current approach
+// (clamp the baseline's adaptation DIRECTION instead of gating on speed), which this test
+// exercises at a deliberately slow ~5s descent, well beyond any realistic squat tempo.
+(function testSlowDescentRegression() {
+  const fsm = newFsm();
+  let completedCount = 0, ts = 0;
+  function feed(depth) { ts += 33; if (tickFsm(fsm, makeSquatLandmarks(depth), ts, hipCenterOf, shoulderWidthOf, squatFrameSample)) completedCount++; }
+  const RAMP = 150; // ~5s at 30fps
+  for (let i = 0; i < 10; i++) feed(0);
+  for (let i = 1; i <= RAMP; i++) feed(i / RAMP);
+  for (let i = 0; i < 5; i++) feed(1);
+  for (let i = RAMP; i >= 0; i--) feed(i / RAMP);
+  for (let i = 0; i < 10; i++) feed(0);
+  assert('tickFsm — a very slow (~5s) rep still completes exactly once', completedCount === 1, `got ${completedCount}`);
+})();
+
+// ═══════════════════════════════════════════════════════
+// ENGINE — generic scorers
+// ═══════════════════════════════════════════════════════
+(function testScoreDepth() {
+  const cfg = { angleField: 'angle', angleTop: 170, angleBottom: 80 };
+  const shallow = [{ ts: 0, trackY: 0.52, scale: 0.2, angle: 150 }];
+  const deep = [{ ts: 0, trackY: 0.52, scale: 0.2, angle: 78 }];
+  assert('scoreDepth — shallow angle scores low', scoreDepth(shallow, cfg).score <= 3);
+  assert('scoreDepth — deep angle scores high', scoreDepth(deep, cfg).score >= 8);
+})();
+
+(function testScoreLateralStability() {
+  const cfg = { stabilityUnit: 0.02 };
+  const flat = [0, 1, 2, 3, 4].map((i) => ({ ts: i, trackX: 0.5, scale: 0.2, phase: 'bottom' }));
+  const noisy = [0.5, 0.54, 0.46, 0.55, 0.45].map((x, i) => ({ ts: i, trackX: x, scale: 0.2, phase: 'bottom' }));
+  assert('scoreLateralStability — flat trackX scores 10', scoreLateralStability(flat, cfg).score === 10);
+  assert('scoreLateralStability — noisy trackX scores lower', scoreLateralStability(noisy, cfg).score < 10);
+})();
+
+(function testScoreSmoothness() {
+  const cfg = { jerkUnit: 4 };
+  const smooth = []; for (let i = 0; i < 10; i++) smooth.push({ ts: i * 33, trackY: 0.5 + i * 0.01, scale: 0.2 });
+  const jerky = []; for (let i = 0; i < 10; i++) jerky.push({ ts: i * 33, trackY: 0.5 + (i % 2 === 0 ? 0.05 : -0.03) * i, scale: 0.2 });
+  assert('scoreSmoothness — constant velocity scores 10', scoreSmoothness(smooth, cfg).score === 10);
+  assert('scoreSmoothness — erratic movement scores lower', scoreSmoothness(jerky, cfg).score < 10);
+})();
+
+// ═══════════════════════════════════════════════════════
+// ENGINE — hold tracker (plank's foundation)
+// ═══════════════════════════════════════════════════════
+(function testHoldTracker() {
+  const cfg = { tolerance: 0.1, formUnit: 0.06, stabilityUnit: 0.03 };
+  const hold = newHold();
+  let ts = 0;
+  // 30 ticks of 200ms = 30*200 = 6000ms of *intervals*, but the first tick only establishes
+  // `lastTs` (there's no prior frame to measure a duration from), so only 29 intervals actually
+  // accrue time — 29*200 = 5800ms. That's tickHold's correct, intentional behavior, not a bug.
+  for (let i = 0; i < 30; i++) { ts += 200; tickHold(hold, ts, 0.02, cfg); }
+  assert('tickHold — accumulates active time while in position (first tick establishes baseline, no duration yet)', hold.activeMs === 5800, `got ${hold.activeMs}`);
+  const score = scoreHold(hold, 5800, cfg);
+  assert('scoreHold — full target duration held scores holdScore 10', score.holdScore === 10, `got ${score.holdScore}`);
+  assert('scoreHold — small consistent deviation scores form well', score.formScore >= 8, `got ${score.formScore}`);
+
+  const shortHold = newHold();
+  ts = 0;
+  for (let i = 0; i < 15; i++) { ts += 200; tickHold(shortHold, ts, 0, cfg); } // half the target
+  const shortScore = scoreHold(shortHold, 6000, cfg);
+  assert('scoreHold — half the target duration scores holdScore ≈5', shortScore.holdScore >= 4 && shortScore.holdScore <= 6, `got ${shortScore.holdScore}`);
+
+  const sagHold = newHold();
+  ts = 0;
+  for (let i = 0; i < 10; i++) { ts += 200; tickHold(sagHold, ts, 0.15, cfg); } // consistent sag
+  const sagScore = scoreHold(sagHold, 2000, cfg);
+  assert('scoreHold — consistent sag gives a positive avgDev', sagScore.avgDev > 0, `got ${sagScore.avgDev}`);
+})();
+
+// ═══════════════════════════════════════════════════════
+// SQUAT — exercise-specific
+// ═══════════════════════════════════════════════════════
+(function testSquatScoring() {
+  const shoW = 0.2;
+  const shallowRep = [{ ts: 0, trackY: 0.52, scale: shoW, kneeAngle: 150, working: { hip: pt(0.5, 0.52), knee: pt(0.5, 0.7) } }];
+  const deepRep = [{ ts: 0, trackY: 0.72, scale: shoW, kneeAngle: 78, working: { hip: pt(0.5, 0.72), knee: pt(0.5, 0.7) } }];
+  const shallow = scoreDepth(shallowRep, SQUAT_EXERCISE);
+  const deep = scoreDepth(deepRep, SQUAT_EXERCISE);
+  assert('squat scoreDepth — shallow scores low, deep scores high', shallow.score <= 3 && deep.score >= 8, `shallow=${shallow.score} deep=${deep.score}`);
+
+  const uprightBuf = [{ ts: 0, hipY: 0.5, scale: 0.2, bothVisible: false, phase: null }];
+  const upright = squatScoreForm(uprightBuf, { working: { shoulder: pt(0.5, 0.2), hip: pt(0.5, 0.5) } });
+  const leaning = squatScoreForm(uprightBuf, { working: { shoulder: pt(0.75, 0.35), hip: pt(0.5, 0.5) } });
+  assert('squatScoreForm — upright torso not lean-flagged', upright.leanFlagged === false);
+  assert('squatScoreForm — large forward lean is flagged', leaning.leanFlagged === true);
+})();
+
+(function testSquatRepFsmIntegration() {
+  const fsm = newFsm();
+  let completed = null, ts = 0;
+  function feed(depth) { ts += 33; const c = tickFsm(fsm, makeSquatLandmarks(depth), ts, hipCenterOf, shoulderWidthOf, squatFrameSample); if (c) completed = c; }
+  for (let i = 0; i < 10; i++) feed(0);
+  for (let i = 1; i <= 15; i++) feed(i / 15);
+  for (let i = 0; i < 5; i++) feed(1);
+  for (let i = 15; i >= 0; i--) feed(i / 15);
+  for (let i = 0; i < 10; i++) feed(0);
+  assert('squat: full FSM cycle produces a scorable rep buffer', completed !== null);
+  if (completed) {
+    const rep = squatScoreRep(completed);
+    assert('squatScoreRep — produces all 4 dimensions + overall', ['rom', 'stability', 'speed', 'form'].every((k) => typeof rep[k].score === 'number') && typeof rep.overall === 'number');
+  }
+})();
+
+// ═══════════════════════════════════════════════════════
+// PUSH-UP — exercise-specific
+// ═══════════════════════════════════════════════════════
+// Side-view body (the real, intended camera angle for push-ups/plank — see
+// verticalLineDeviation's docs in form-coach-engine.js): shoulder/hip/ankle spread out
+// horizontally (x: 0.25 -> 0.5 -> 0.75) rather than stacked at one x, with the whole line held
+// perfectly flat (constant y across all three) so the body-line deviation is always exactly 0
+// regardless of depth — only the elbow bends to drive rep detection via shoulder-center motion.
+function makePushupLandmarks(depth) {
+  const lmArr = new Array(33);
+  const y = 0.3 + depth * 0.15;
+  lmArr[LM.LSHO] = lm(0.25, y); lmArr[LM.RSHO] = lm(0.25, y);
+  lmArr[LM.LWRI] = lm(0.25, 0.5); lmArr[LM.RWRI] = lm(0.25, 0.5);
+  lmArr[LM.LELB] = lm(0.25 + 0.15 * depth, (y + 0.5) / 2); lmArr[LM.RELB] = lm(0.25 + 0.15 * depth, (y + 0.5) / 2);
+  lmArr[LM.LHIP] = lm(0.5, y); lmArr[LM.RHIP] = lm(0.5, y);
+  lmArr[LM.LANK] = lm(0.75, y); lmArr[LM.RANK] = lm(0.75, y);
+  return lmArr;
+}
+
+(function testPushupBodyLineStraight() {
+  // Shoulder/hip/ankle all shift by the same delta -> the body line stays straight throughout.
+  const working = pushupWorkingLandmarks(makePushupLandmarks(0.7), 'both');
+  const dev = pushupBodyLineDeviation(working, 0.2);
+  assert('push-up: uniform shoulder/hip/ankle shift keeps body-line deviation ≈ 0', Math.abs(dev) < 0.01, `got ${dev}`);
+})();
+
+(function testPushupSagPike() {
+  const shoW = 0.2;
+  const baseWorking = { shoulder: pt(0.2, 0.3), ankle: pt(0.8, 0.7) };
+  const sagDev = pushupBodyLineDeviation(Object.assign({}, baseWorking, { hip: pt(0.5, 0.65) }), shoW);
+  const pikeDev = pushupBodyLineDeviation(Object.assign({}, baseWorking, { hip: pt(0.5, 0.35) }), shoW);
+  assert('push-up: sagging hip gives positive deviation', sagDev > 0, `got ${sagDev}`);
+  assert('push-up: piked hip gives negative deviation', pikeDev < 0, `got ${pikeDev}`);
+})();
+
+(function testPushupRepFsmIntegration() {
+  const fsm = newFsm();
+  let completed = null, ts = 0;
+  function feed(depth) { ts += 33; const c = tickFsm(fsm, makePushupLandmarks(depth), ts, pushupTrackPoint, shoulderWidthOf, pushupFrameSample); if (c) completed = c; }
+  for (let i = 0; i < 10; i++) feed(0);
+  for (let i = 1; i <= 15; i++) feed(i / 15);
+  for (let i = 0; i < 5; i++) feed(1);
+  for (let i = 15; i >= 0; i--) feed(i / 15);
+  for (let i = 0; i < 10; i++) feed(0);
+  assert('push-up: full FSM cycle (tracking shoulder-center) produces a scorable rep', completed !== null);
+  if (completed) {
+    const rep = pushupScoreRep(completed);
+    assert('pushupScoreRep — produces all 4 dimensions + overall', ['rom', 'stability', 'speed', 'form'].every((k) => typeof rep[k].score === 'number') && typeof rep.overall === 'number');
+    assert('pushupScoreRep — a clean, straight-line rep is not form-flagged', rep.form.sagFlagged === false && rep.form.pikeFlagged === false, `sag=${rep.form.sagFlagged} pike=${rep.form.pikeFlagged}`);
+  }
+})();
+
+// ═══════════════════════════════════════════════════════
+// LUNGE — exercise-specific
+// ═══════════════════════════════════════════════════════
+(function testLungeKneeOverToe() {
+  const shoW = 0.2;
+  // Stepping "forward" toward higher x: knee past the ankle in that direction is flagged.
+  const pastToe = lungeKneeOverToeOffset({ hip: pt(0.5, 0.5), knee: pt(0.75, 0.7), ankle: pt(0.7, 0.9) }, shoW);
+  const behindToe = lungeKneeOverToeOffset({ hip: pt(0.5, 0.5), knee: pt(0.65, 0.7), ankle: pt(0.7, 0.9) }, shoW);
+  assert('lunge: knee past the ankle (forward stance) flags positive', pastToe > 0.12, `got ${pastToe}`);
+  assert('lunge: knee behind the ankle is negative (fine)', behindToe < 0, `got ${behindToe}`);
+  // Mirrored stance (stepping toward lower x) — same physical relationship, opposite screen dir.
+  const pastToeMirrored = lungeKneeOverToeOffset({ hip: pt(0.5, 0.5), knee: pt(0.25, 0.7), ankle: pt(0.3, 0.9) }, shoW);
+  assert('lunge: orientation-agnostic (mirrored stance still flags past-toe)', pastToeMirrored > 0.12, `got ${pastToeMirrored}`);
+})();
+
+(function testLungeFrontLegPicksMoreBentSide() {
+  const lmArr = new Array(33);
+  lmArr[LM.LHIP] = lm(0.45, 0.5); lmArr[LM.LKNEE] = lm(0.45, 0.6); lmArr[LM.LANK] = lm(0.45, 0.95); // sharply bent
+  lmArr[LM.RHIP] = lm(0.55, 0.5); lmArr[LM.RKNEE] = lm(0.55, 0.75); lmArr[LM.RANK] = lm(0.55, 0.95); // straighter
+  const { side } = lungeFrontLeg(lmArr);
+  assert('lunge: picks the more-bent (smaller-angle) leg as front', side === 'left', `got ${side}`);
+})();
+
+// ═══════════════════════════════════════════════════════
+// PLANK — hold-based, no reps
+// ═══════════════════════════════════════════════════════
+function makePlankLandmarks(devAmount) {
+  // A straight shoulder->ankle line with the hip offset by `devAmount` (in y) to simulate sag/pike.
+  const lmArr = new Array(33);
+  lmArr[LM.LSHO] = lm(0.2, 0.3); lmArr[LM.RSHO] = lm(0.2, 0.3);
+  lmArr[LM.LHIP] = lm(0.5, 0.5 + devAmount); lmArr[LM.RHIP] = lm(0.5, 0.5 + devAmount);
+  lmArr[LM.LANK] = lm(0.8, 0.7); lmArr[LM.RANK] = lm(0.8, 0.7);
+  return lmArr;
+}
+
+(function testPlankDeviationAndLiveCheck() {
+  const straightDev = plankDeviationOf(makePlankLandmarks(0));
+  assert('plank: straight body-line deviation ≈ 0', Math.abs(straightDev) < 0.05, `got ${straightDev}`);
+  const sagWarn = plankLiveFrameCheck(makePlankLandmarks(0.2));
+  const pikeWarn = plankLiveFrameCheck(makePlankLandmarks(-0.2));
+  assert('plank: sagging hips triggers the sag live-warning', sagWarn === PLANK_EXERCISE.issueLines.sag, `got ${sagWarn}`);
+  assert('plank: piked hips triggers the pike live-warning', pikeWarn === PLANK_EXERCISE.issueLines.pike, `got ${pikeWarn}`);
+  assert('plank: aligned hips triggers no live warning', plankLiveFrameCheck(makePlankLandmarks(0)) === null);
+})();
+
+(function testPlankTickAndScore() {
+  const hold = newHold();
+  let ts = 0;
+  // 300 ticks of 200ms, but (as above) the first tick only establishes the baseline — 299
+  // intervals actually accrue, 299*200 = 59800ms. Close enough to 60s for the routine's actual
+  // target check (>=) in practice; this test targets scoreHold against the real accrued value.
+  for (let i = 0; i < 300; i++) { ts += 200; plankTick(hold, makePlankLandmarks(0), ts); }
+  assert('plankTick — accumulates ~60s of hold time', hold.activeMs === 59800, `got ${hold.activeMs}`);
+  const scored = scoreHold(hold, 59800, PLANK_EXERCISE);
+  const fb = plankFeedback(scored);
+  assert('plank: a full, aligned 60s hold gets a positive (non-warn) summary', fb.warn === false, `text="${fb.text}"`);
+
+  const sagHold = newHold();
+  ts = 0;
+  for (let i = 0; i < 300; i++) { ts += 200; plankTick(sagHold, makePlankLandmarks(0.2), ts); }
+  const sagScored = scoreHold(sagHold, 60000, PLANK_EXERCISE);
+  const sagFb = plankFeedback(sagScored);
+  assert('plank: a consistently sagging hold gets a warn summary mentioning sag', sagFb.warn === true && sagFb.text === PLANK_EXERCISE.issueLines.sag, `text="${sagFb.text}"`);
+})();
+
+// ═══════════════════════════════════════════════════════
+// DAILY ROUTINE — pure persistence/progress-grid helpers (computeDayStats/withAlpha/
+// qualityCellStyle/dailyRoutineAllTimeStats/dailyRoutineStreak). Uses real localStorage (this
+// file runs in an actual browser), cleared before each block so tests don't see each other's data.
+// ═══════════════════════════════════════════════════════
+(function testComputeDayStats() {
+  const mixed = computeDayStats([
+    { kind: 'reps', completedReps: 20, overall: 8 },
+    { kind: 'reps', completedReps: 15, overall: 6 },
+    { kind: 'hold', heldSeconds: 60, overall: 9 },
+    { kind: 'timer' },
+  ]);
+  assert('computeDayStats — totalReps sums only reps-kind steps', mixed.totalReps === 35, `got ${mixed.totalReps}`);
+  assert('computeDayStats — totalHoldSeconds sums only hold-kind steps', mixed.totalHoldSeconds === 60, `got ${mixed.totalHoldSeconds}`);
+  assert('computeDayStats — avgQuality averages every scored step regardless of kind', mixed.avgQuality === 7.7, `got ${mixed.avgQuality}`);
+
+  const nothingScorable = computeDayStats([{ kind: 'timer' }, { kind: 'timer' }]);
+  assert('computeDayStats — avgQuality is null (not 0) when nothing was scorable', nothingScorable.avgQuality === null, `got ${nothingScorable.avgQuality}`);
+
+  const empty = computeDayStats([]);
+  assert('computeDayStats — an empty results array is zero reps/hold and null quality', empty.totalReps === 0 && empty.totalHoldSeconds === 0 && empty.avgQuality === null);
+})();
+
+(function testWithAlpha() {
+  assert('withAlpha — converts T.accent to the expected rgba string', withAlpha('#7aa676', 0.5) === 'rgba(122,166,118,0.5)', `got ${withAlpha('#7aa676', 0.5)}`);
+  assert('withAlpha — alpha 1 stays fully opaque', withAlpha('#c9564a', 1) === 'rgba(201,86,74,1)', `got ${withAlpha('#c9564a', 1)}`);
+})();
+
+(function testQualityCellStyle() {
+  const notDone = qualityCellStyle(null);
+  assert('qualityCellStyle — no entry (not done) uses the neutral pill background', notDone.bg === T.pill, `got ${notDone.bg}`);
+
+  const unscored = qualityCellStyle({ avgQuality: null });
+  assert('qualityCellStyle — done but unscored is a dim, distinct accent tint (not the pill, not a real score color)', unscored.bg === withAlpha(T.accent, 0.3), `got ${unscored.bg}`);
+
+  const poor = qualityCellStyle({ avgQuality: 4 });
+  assert('qualityCellStyle — avgQuality<=4 uses WARN_COLOR solid', poor.bg === WARN_COLOR, `got ${poor.bg}`);
+
+  const midGood = qualityCellStyle({ avgQuality: 5 });
+  const veryGood = qualityCellStyle({ avgQuality: 10 });
+  assert('qualityCellStyle — score 5 is a faint accent tint', midGood.bg === withAlpha(T.accent, 0.35), `got ${midGood.bg}`);
+  assert('qualityCellStyle — score 10 is a fully solid accent tint', veryGood.bg === withAlpha(T.accent, 1), `got ${veryGood.bg}`);
+})();
+
+(function testDailyRoutineAllTimeStatsAndStreak() {
+  localStorage.removeItem('mf.dailyRoutine');
+  assert('dailyRoutineAllTimeStats — no data yet is all zero/null', (() => {
+    const s = dailyRoutineAllTimeStats();
+    return s.daysCompleted === 0 && s.totalReps === 0 && s.avgQuality === null;
+  })());
+  assert('dailyRoutineStreak — no data yet is 0', dailyRoutineStreak() === 0);
+
+  const today = dateKey();
+  const yesterday = dateKey(Date.now() - 86400000);
+  const twoDaysAgo = dateKey(Date.now() - 2 * 86400000);
+  saveDailyRoutine([
+    { date: twoDaysAgo, completed: true, totalReps: 50, avgQuality: 6 },
+    { date: yesterday, completed: true, totalReps: 60, avgQuality: 8 },
+    { date: today, completed: true, totalReps: 40, avgQuality: null },
+  ]);
+  const totals = dailyRoutineAllTimeStats();
+  assert('dailyRoutineAllTimeStats — daysCompleted counts every completed entry', totals.daysCompleted === 3, `got ${totals.daysCompleted}`);
+  assert('dailyRoutineAllTimeStats — totalReps sums across all days', totals.totalReps === 150, `got ${totals.totalReps}`);
+  assert('dailyRoutineAllTimeStats — avgQuality averages only days with a real score, excluding null', totals.avgQuality === 7, `got ${totals.avgQuality}`);
+  assert('dailyRoutineStreak — 3 consecutive days ending today is a streak of 3', dailyRoutineStreak() === 3, `got ${dailyRoutineStreak()}`);
+
+  saveDailyRoutine([
+    { date: twoDaysAgo, completed: true, totalReps: 50, avgQuality: 6 },
+    { date: today, completed: true, totalReps: 40, avgQuality: 7 },
+  ]);
+  assert('dailyRoutineStreak — a gap day breaks the streak down to 1', dailyRoutineStreak() === 1, `got ${dailyRoutineStreak()}`);
+
+  localStorage.removeItem('mf.dailyRoutine');
+})();
+
+// ═══════════════════════════════════════════════════════
+// Summary
+// ═══════════════════════════════════════════════════════
+const summary = document.getElementById('summary');
+summary.textContent = `${passed + failed} tests — ${passed} passed, ${failed} failed`;
+summary.style.color = failed === 0 ? '#4caf50' : '#f44336';
+</script>
+</body>
+</html>
