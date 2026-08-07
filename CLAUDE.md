@@ -48,28 +48,44 @@ As of the Daily Routine addition, this is a 14-file static site, not a single `i
 
 ## Working File & Git Sync
 
-**Working files**: `c:\Users\crist\Downloads\{index.html, office.html, shared.js, am.js, office.js}` (edited here, tested locally in mobile Safari via file sharing — all 5 files must be present in the same folder since they reference each other by relative path)
+**Working files**: `c:\Users\crist\Downloads\` (edited here, tested locally in mobile Safari via
+file sharing — every file below must be present in the same folder since they reference each
+other by relative path)
 **Repo**: `c:\Users\crist\Downloads\workout-repo\`
 **Live URL**: https://cwinter1.github.io/workout/
 
-Before every commit, sync all 5 files:
+Before every commit, sync every file (a review round found this list going stale after 9 files
+were added post-launch without the actual `cp` block being updated — kept literal and complete
+here on purpose, not left as prose, since a partial sync from an incomplete list is a real risk):
 ```
-cp "c:/Users/crist/Downloads/index.html"  "c:/Users/crist/Downloads/workout-repo/index.html"
-cp "c:/Users/crist/Downloads/office.html" "c:/Users/crist/Downloads/workout-repo/office.html"
-cp "c:/Users/crist/Downloads/shared.js"   "c:/Users/crist/Downloads/workout-repo/shared.js"
-cp "c:/Users/crist/Downloads/am.js"       "c:/Users/crist/Downloads/workout-repo/am.js"
-cp "c:/Users/crist/Downloads/office.js"   "c:/Users/crist/Downloads/workout-repo/office.js"
+cp "c:/Users/crist/Downloads/index.html"              "c:/Users/crist/Downloads/workout-repo/index.html"
+cp "c:/Users/crist/Downloads/office.html"              "c:/Users/crist/Downloads/workout-repo/office.html"
+cp "c:/Users/crist/Downloads/shared.js"                "c:/Users/crist/Downloads/workout-repo/shared.js"
+cp "c:/Users/crist/Downloads/am.js"                    "c:/Users/crist/Downloads/workout-repo/am.js"
+cp "c:/Users/crist/Downloads/office.js"                "c:/Users/crist/Downloads/workout-repo/office.js"
+cp "c:/Users/crist/Downloads/form-coach-engine.js"     "c:/Users/crist/Downloads/workout-repo/form-coach-engine.js"
+cp "c:/Users/crist/Downloads/exercise-squat.js"        "c:/Users/crist/Downloads/workout-repo/exercise-squat.js"
+cp "c:/Users/crist/Downloads/exercise-pushup.js"       "c:/Users/crist/Downloads/workout-repo/exercise-pushup.js"
+cp "c:/Users/crist/Downloads/exercise-lunge.js"        "c:/Users/crist/Downloads/workout-repo/exercise-lunge.js"
+cp "c:/Users/crist/Downloads/exercise-plank.js"        "c:/Users/crist/Downloads/workout-repo/exercise-plank.js"
+cp "c:/Users/crist/Downloads/squat-coach.html"         "c:/Users/crist/Downloads/workout-repo/squat-coach.html"
+cp "c:/Users/crist/Downloads/squat-coach.js"           "c:/Users/crist/Downloads/workout-repo/squat-coach.js"
+cp "c:/Users/crist/Downloads/daily-routine.html"       "c:/Users/crist/Downloads/workout-repo/daily-routine.html"
+cp "c:/Users/crist/Downloads/daily-routine.js"         "c:/Users/crist/Downloads/workout-repo/daily-routine.js"
 ```
 
 Never edit the `workout-repo/` copies directly. Always sync from Downloads first.
 
-Every file added since the original 5 (`form-coach-engine.js`, `exercise-squat.js`,
-`exercise-pushup.js`, `exercise-lunge.js`, `exercise-plank.js`, `squat-coach.html`/`.js`,
-`daily-routine.html`/`.js`) follows the same Downloads → `workout-repo/` sync convention once
-they're part of the local working set — but unlike the original 5, opening `squat-coach.html` or
-`daily-routine.html` directly via `file://`/phone-file-sharing only gets you as far as the landing
-screen; the "Start Camera"/"Start Routine" flow requires a secure context (https/`localhost`) and
-can only be verified for real on the live GitHub Pages URL. See `memory/form_coach.md`.
+`apps-script/Code.gs` is the one repo file that sits outside this Downloads/file-sharing workflow
+entirely — it's never opened as a page (it only ever runs inside Google's Apps Script runtime), so
+there's no local-Safari-preview reason to route it through Downloads. Edit it directly in the repo
+checkout, and remember editing it there doesn't reach the live `/exec` endpoint by itself — see
+`memory/data_shapes.md`'s "Google Sheets sync" section for the manual redeploy step that does.
+
+Opening `squat-coach.html` or `daily-routine.html` directly via `file://`/phone-file-sharing only
+gets you as far as the landing screen; the "Start Camera"/"Start Routine" flow requires a secure
+context (https/`localhost`) and can only be verified for real on the live GitHub Pages URL. See
+`memory/form_coach.md`.
 
 ### Git workflow (non-negotiable)
 ```
