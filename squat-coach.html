@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0e1116">
+<title>Squat Form Coach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; background: #0e1116; font-family: 'Manrope', system-ui, sans-serif; overscroll-behavior: none; }
+button { font-family: inherit; cursor: pointer; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes rise { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+</style>
+</head>
+<body>
+<div id="root" style="height:100dvh;display:flex;flex-direction:column;position:relative;overflow:hidden;"></div>
+
+<!--
+  Legacy MediaPipe Pose "Solutions" API — classic <script src> globals (Pose, drawConnectors,
+  drawLandmarks, POSE_CONNECTIONS), not the newer ES-module-only Tasks Vision API, to stay
+  consistent with this repo's no-ES-modules rule. Google has frozen/deprecated this API line,
+  but jsDelivr serves published npm packages indefinitely, so the CDN files aren't going
+  anywhere. Camera capture itself is driven directly via getUserMedia in squat-coach.js (not
+  @mediapipe/camera_utils' Camera helper) so front/rear selection and stream teardown are under
+  our own control rather than an unverified third-party wrapper. Must load before
+  shared.js/squat-coach.js. See memory/squat_coach.md.
+-->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+<script src="shared.js"></script>
+<script src="squat-coach.js"></script>
+</body>
+</html>

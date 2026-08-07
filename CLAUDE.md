@@ -14,7 +14,7 @@ The app title is in Hebrew: **Morning Flow · כריס** (כריס = Chris). Lay
 
 ## Non-Negotiable Constraints
 
-- Plain multi-file static site — no framework, no build step, no bundler. Splitting into multiple files is allowed (see "File Structure" below) as long as every file is loaded via plain `<script src="...">` (classic scripts, not ES modules) so it still works when opened directly via `file://`.
+- Plain multi-file static site — no framework, no build step, no bundler. Splitting into multiple files is allowed (see "File Structure" below) as long as every file is loaded via plain `<script src="...">` (classic scripts, not ES modules) so it still works when opened directly via `file://`. **One documented exception**: `squat-coach.html`'s "Start Camera" flow needs `getUserMedia`, which requires a secure context (https/`localhost`) — that one page cannot be exercised via plain `file://`, since that's a browser platform rule, not something this app's code controls. See `memory/squat_coach.md`.
 - iOS Safari only — every layout and API decision must work on iPhone
 - `localStorage` only — no backend, no sync, no account
 - No emojis anywhere
@@ -25,19 +25,21 @@ The app title is in Hebrew: **Morning Flow · כריס** (כריס = Chris). Lay
 
 ## File Structure
 
-As of the Office program addition, this is a 5-file static site, not a single `index.html`:
+As of the Squat Form Coach addition, this is a 7-file static site, not a single `index.html`:
 
 | File | Contents |
 |------|----------|
 | `index.html` | Thin shell — head boilerplate + `<script src="shared.js">` + `<script src="am.js">` |
 | `office.html` | Thin shell — head boilerplate + `<script src="shared.js">` + `<script src="office.js">` |
-| `shared.js` | Engine shared by both programs: palette (`T`), `el()`/icons, `EX_INFO`/`YT_IDS`, audio/haptic, wake lock, all `mf.*` localStorage helpers, `getStreak()`, `captureProgressPhoto()`, `shareWorkout()`, generic `renderWeekSection()`/`renderProgressGrid()`, the whole session engine (`startSession`/`startTimer`/`updateTimerDisplay`/`skipExercise`/`abortSession`/`finishSession`), and the shared render functions (`renderPreview`/`renderSession`/`renderRest`/`renderMeditation`/`renderControls`/`renderDone`) |
+| `shared.js` | Engine shared by both timed programs: palette (`T`), `el()`/icons, `EX_INFO`/`YT_IDS`, audio/haptic, wake lock, all `mf.*` localStorage helpers, `getStreak()`, `captureProgressPhoto()`, `shareWorkout()`, generic `renderWeekSection()`/`renderProgressGrid()`, the whole session engine (`startSession`/`startTimer`/`updateTimerDisplay`/`skipExercise`/`abortSession`/`finishSession`), and the shared render functions (`renderPreview`/`renderSession`/`renderRest`/`renderMeditation`/`renderControls`/`renderDone`) |
 | `am.js` | AM-program-only: `PROGRAM` data, `COACH_CUES`, `HOME_PHRASES`, `pickMessage()`, `renderHome()`/`renderPhaseChips()`/`renderProgram()`/`renderMeasurements()`, its own `state`/`render()`/`nextSession()`/`currentDay()` |
 | `office.js` | Office-program-only: `OFFICE_PROGRAM` data, `OFFICE_PHRASES`, `pickOfficeMessage()`, `renderHome()`/`renderOfficeBreakdown()`, its own `state`/`render()`/`nextSession()`/`currentDay()` |
+| `squat-coach.html` | Thin shell — head boilerplate + MediaPipe Pose CDN scripts (`drawing_utils.js`, `pose.js`) + `<script src="shared.js">` + `<script src="squat-coach.js">` |
+| `squat-coach.js` | Camera-based squat form coach — fully self-contained, own `state`/`render()`. Reuses only generic utilities from `shared.js` (`T`/`el`/icons/`beep`/wake lock) — sits entirely outside the session-engine "contract" below, since it's continuous camera analysis, not a phase/timer timeline. See `memory/squat_coach.md` |
 
-**Why this shape, not ES modules or a bundler:** `index.html` and `office.html` are two independent pages linked by plain `<a>`/`window.location` navigation (a real page load, not an in-app view switch) — see `memory/architecture_decisions.md` for the full reasoning and the "contract" functions (`currentDay()`, `nextSession()`, `buildSessionTimeline()`, `pickDoneMessage()`, `PROGRESS_PREFIX`, `TOTAL_SESSIONS`) each page-specific file must define before `shared.js`'s generic engine functions are called.
+**Why this shape, not ES modules or a bundler:** `index.html`, `office.html`, and `squat-coach.html` are independent pages linked by plain `<a>`/`window.location` navigation (a real page load, not an in-app view switch) — see `memory/architecture_decisions.md` for the full reasoning and the "contract" functions (`currentDay()`, `nextSession()`, `buildSessionTimeline()`, `pickDoneMessage()`, `PROGRESS_PREFIX`, `TOTAL_SESSIONS`) each timed-program page-specific file must define before `shared.js`'s generic engine functions are called. `squat-coach.js` does not implement this contract — it has no phase/timer timeline to hand off to `shared.js`'s engine.
 
-**Editing rule:** touching AM-only content → edit `am.js`. Touching Office-only content → edit `office.js`. Touching the timer/session/done-screen engine, Garmin/measurements storage, or anything both programs use → edit `shared.js`. Don't reintroduce inline `<script>` blocks in either `.html` file — keep them as thin shells.
+**Editing rule:** touching AM-only content → edit `am.js`. Touching Office-only content → edit `office.js`. Touching Squat Coach → edit `squat-coach.js`/`squat-coach.html` only, never `shared.js`. Touching the timer/session/done-screen engine, Garmin/measurements storage, or anything both timed programs use → edit `shared.js`. Don't reintroduce inline `<script>` blocks in any `.html` file — keep them as thin shells.
 
 ---
 
@@ -57,6 +59,12 @@ cp "c:/Users/crist/Downloads/office.js"   "c:/Users/crist/Downloads/workout-repo
 ```
 
 Never edit the `workout-repo/` copies directly. Always sync from Downloads first.
+
+`squat-coach.html`/`squat-coach.js` follow the same Downloads → `workout-repo/` sync convention as
+the other 5 files once they're part of the local working set — but unlike those 5, opening
+`squat-coach.html` directly via `file://`/phone-file-sharing only gets you as far as the landing
+screen; the "Start Camera" flow requires a secure context (https/`localhost`) and can only be
+verified for real on the live GitHub Pages URL. See `memory/squat_coach.md`.
 
 ### Git workflow (non-negotiable)
 ```
@@ -481,3 +489,5 @@ Files:
 - Don't add colors outside the T object
 - Don't introduce new fonts — only the 4 already loaded
 - Don't store full-resolution photos in localStorage — thumbnail only, full image via Web Share API
+- Don't add persistence to Squat Form Coach without being asked — Phase 1 is explicitly in-memory only, no `mf.*` key or any other localStorage key
+- Don't wire Squat Coach into `shared.js`'s session-engine contract (`currentDay()`/`nextSession()`/etc.) — it's a continuous camera analysis screen, not a phase/timer timeline, and stays outside that contract by design
