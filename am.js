@@ -448,7 +448,13 @@ function renderHome(root) {
   const measBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
   measBtn.innerHTML = `<span>Measurements</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
   measBtn.onclick = () => { state.view = 'measurements'; render(); };
-  bottomLinks.append(progBtn, officeBtn, qflowBtn, measBtn);
+  // Deep-links straight into daily-routine.js's Progress/Evolution screen (?view=progress) rather
+  // than routing through Daily Routine's own landing screen first — previously reachable only one
+  // level deep (a button inside daily-routine.html), not directly from this home screen.
+  const routineProgBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
+  routineProgBtn.innerHTML = `<span>Daily Routine — Progress</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
+  routineProgBtn.onclick = () => { window.location.href = 'daily-routine.html?view=progress'; };
+  bottomLinks.append(progBtn, routineProgBtn, officeBtn, qflowBtn, measBtn);
 
   const phraseCard = el('div', `padding:12px 0;`);
   const phraseText = el('div', `font-family:"Instrument Serif",serif;font-size:20px;font-style:italic;line-height:1.35;color:${T.sub};`);
