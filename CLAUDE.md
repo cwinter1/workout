@@ -16,7 +16,7 @@ The app title is in Hebrew: **Morning Flow · כריס** (כריס = Chris). Lay
 
 - Plain multi-file static site — no framework, no build step, no bundler. Splitting into multiple files is allowed (see "File Structure" below) as long as every file is loaded via plain `<script src="...">` (classic scripts, not ES modules) so it still works when opened directly via `file://`. **One documented exception**: `squat-coach.html`'s "Start Camera" flow and `daily-routine.html`'s "Start Routine" flow both need `getUserMedia`, which requires a secure context (https/`localhost`) — those two pages cannot be exercised via plain `file://`, since that's a browser platform rule, not something this app's code controls. See `memory/form_coach.md`.
 - iOS Safari only — every layout and API decision must work on iPhone
-- `localStorage` only — no backend, no sync, no account
+- `localStorage` only — no backend, no account. **One documented exception**: a best-effort, opt-in `syncToSheets()` (`shared.js`) POSTs a copy of session/Daily-Routine/measurement records to a Google Apps Script URL you paste in yourself (`mf.syncUrl`, empty by default) — off-device durability + trend analysis, not a second source of truth. `localStorage` is unaffected either way and stays authoritative. See `memory/data_shapes.md`'s "Google Sheets sync" section.
 - No emojis anywhere
 - No Garmin API — manual entry only, by design
 - Never push directly to main
@@ -38,6 +38,7 @@ As of the Daily Routine addition, this is a 14-file static site, not a single `i
 | `exercise-squat.js` / `exercise-pushup.js` / `exercise-lunge.js` / `exercise-plank.js` | Each exercise's own config + scoring, built on `form-coach-engine.js`'s generics. Loaded by whichever page(s) need that exercise. See `memory/form_coach.md` |
 | `squat-coach.html` / `squat-coach.js` | Standalone single-exercise camera form coach — fully self-contained, own `state`/`render()`. Sits entirely outside the session-engine "contract" below, since it's continuous camera analysis, not a phase/timer timeline. See `memory/form_coach.md` |
 | `daily-routine.html` / `daily-routine.js` | The fixed, same-every-day 9-step camera-coached routine (warmup → 2× push-ups/squats/plank → lunges → cooldown) — sequences all 4 exercises inside ONE continuous camera session, prefaced by a one-time camera-placement setup check (confirms one fixed phone spot tracks both standing and floor poses). Also outside the session-engine contract; has its own persistence key (`mf.dailyRoutine`, a calendar-date completion log, not the AM/Office week/day shape) and its own Progress/Evolution screen (a bespoke calendar-date quality heatmap, reps + quality + rate over time — not a reuse of `shared.js`'s week×day `renderProgressGrid()`, which doesn't fit this feature's date-only data model). See `memory/daily_routine.md` and `memory/form_coach.md` |
+| `apps-script/Code.gs` | The Google Apps Script source for the `syncToSheets()` receiving endpoint — checked into this repo as the source of truth, but editing it here does NOT affect the live `/exec` URL by itself; changes must be pasted into the actual Apps Script editor and redeployed as a new Web app version. Routes incoming payloads by `type` (`session`/`daily_routine`/`measurement`) into 3 separate sheet tabs. See `memory/data_shapes.md`'s "Google Sheets sync" section |
 
 **Why this shape, not ES modules or a bundler:** `index.html`, `office.html`, `squat-coach.html`, and `daily-routine.html` are independent pages linked by plain `<a>`/`window.location` navigation (a real page load, not an in-app view switch) — see `memory/architecture_decisions.md` for the full reasoning and the "contract" functions (`currentDay()`, `nextSession()`, `buildSessionTimeline()`, `pickDoneMessage()`, `PROGRESS_PREFIX`, `TOTAL_SESSIONS`) each timed-program page-specific file must define before `shared.js`'s generic engine functions are called. Neither `squat-coach.js` nor `daily-routine.js` implements this contract — neither has a phase/timer timeline to hand off to `shared.js`'s engine.
 
@@ -468,7 +469,7 @@ Not built yet. Do not wire up until asked.
 
 - **Device**: iPhone, iOS Safari only
 - **Location**: Israel
-- **Data**: `localStorage` only — no backend, no sync
+- **Data**: `localStorage` only — no backend or account; an opt-in Google Sheets sync exists for off-device durability/analysis (see "Non-Negotiable Constraints" above), but `localStorage` stays the source of truth
 - **Goal**: 4-week morning routine → track body metrics + Garmin data manually
 - **Garmin**: Manual entry — no API, no PC export. Two entry points: pre-workout sleep data, post-workout activity data.
 

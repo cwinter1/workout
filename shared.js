@@ -1177,7 +1177,11 @@ function renderDone(root) {
     if (si !== -1 && workoutRating != null) { sessions[si].workoutRating = workoutRating; saveSessions(sessions); }
     // sync to sheets
     const preG = loadGarmin().find(g => g.type === 'pre' && g.sessionKey === sessionKey) || {};
+    // `type` disambiguates this row from the daily_routine/measurement payloads sent by
+    // daily-routine.js/am.js's Measurements screen — all 3 flow through the same syncToSheets()
+    // endpoint, so the receiving Apps Script needs a field to route on. See memory/data_shapes.md.
     syncToSheets({
+      type: 'session',
       date: dateKey(), week: state.week, day: state.day,
       dayTitle: currentDay().title, dayTag: currentDay().tag,
       duration: duration,

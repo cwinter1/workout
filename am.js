@@ -454,7 +454,14 @@ function renderHome(root) {
   const routineProgBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
   routineProgBtn.innerHTML = `<span>Daily Routine — Progress</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
   routineProgBtn.onclick = () => { window.location.href = 'daily-routine.html?view=progress'; };
-  bottomLinks.append(progBtn, routineProgBtn, officeBtn, qflowBtn, measBtn);
+  // A second, plain entry point to the coach page itself (not just its Progress sub-view) —
+  // this list (4-week program/Office/Q·Flow/Measurements) was the original, familiar nav before
+  // Daily Routine/Squat Coach existed, so a duplicate plain link here (in addition to the two
+  // accent cards higher up) is a deliberate redundancy, not a stray leftover.
+  const routineLinkBtn = el('button', `appearance:none;background:transparent;border:1px solid ${T.hairline};color:${T.fg};border-radius:6px;padding:14px 16px;font-family:${T.mono_ff};font-size:11px;letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;width:100%;`);
+  routineLinkBtn.innerHTML = `<span>Daily Routine</span><span style="opacity:0.6">${iconArrow(T.fg)}</span>`;
+  routineLinkBtn.onclick = () => { window.location.href = 'daily-routine.html'; };
+  bottomLinks.append(progBtn, routineProgBtn, officeBtn, qflowBtn, routineLinkBtn, measBtn);
 
   const phraseCard = el('div', `padding:12px 0;`);
   const phraseText = el('div', `font-family:"Instrument Serif",serif;font-size:20px;font-style:italic;line-height:1.35;color:${T.sub};`);
@@ -573,6 +580,16 @@ function renderMeasurements(root) {
     const list = loadMeasurements();
     list.push(entry);
     saveMeasurements(list);
+    // Best-effort off-device copy, same mechanism as the AM/Office "Bank it" sync and Daily
+    // Routine's completion sync — see memory/data_shapes.md. `date` here is dateKey()-style
+    // (YYYY-MM-DD), not entry.date's full ISO timestamp, so all 3 payload types group by day the
+    // same way in the sheet.
+    syncToSheets({
+      type: 'measurement',
+      date: dateKey(new Date(entry.date).getTime()),
+      weight: entry.weight ?? null, waist: entry.waist ?? null, hips: entry.hips ?? null,
+      hr: entry.hr ?? null, energy: entry.energy ?? null,
+    });
     state.view = 'measurements';
     render();
   };
