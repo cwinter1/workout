@@ -113,7 +113,10 @@ Style rules:
 - `height:100dvh` on root — dynamic viewport height, essential for iOS Safari
 - Page transition: `animation:rise .25s ease` on every `render()` call
 
-Do not introduce colors outside the T object.
+Do not introduce colors outside the T object. **One documented exception**: `squat-coach.js`
+defines its own local `WARN_COLOR` (not added to `T`) for a red "you're doing this wrong" state on
+live feedback, score chips, and summary stats — a feature-specific, explicitly-requested exception
+scoped to that one file, not a change to the shared design system. See `memory/squat_coach.md`.
 
 ---
 

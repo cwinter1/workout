@@ -32,6 +32,14 @@ const SQUAT_EXERCISE = {
   stabilityUnit: 0.02, jerkUnit: 4,
   valgusThreshold: 0.06, leanThreshold: 45,
   positiveLines: ['Clean rep.', 'Solid rep. No flags.', 'Good depth. Controlled.', 'Consistent rep.'],
+  issueLines: {
+    rom: 'Go lower — aim for thighs parallel to the ground.',
+    valgus: 'Knees caving in — push them out over your toes.',
+    lean: 'Leaning forward — keep your chest up.',
+    stability: 'Steady the bottom — brace your core.',
+    speed: 'Slow down — control the descent.',
+    form: 'Focus on knee alignment and torso lean next set.',
+  },
 };
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -140,7 +148,9 @@ function tickFsm(fsm, lm, ts) {
   let completed = null;
 
   if (fsm.fsmState === 'standing') {
-    fsm.topBaselineY += (smoothedY - fsm.topBaselineY) * 0.05;
+    if (smoothedY < fsm.topBaselineY) {
+      fsm.topBaselineY += (smoothedY - fsm.topBaselineY) * 0.05;
+    }
     if (smoothedY - fsm.topBaselineY > DESCEND_DELTA) {
       if (++fsm.debounceCount >= DEBOUNCE_FRAMES) { fsm.fsmState = 'descending'; fsm.debounceCount = 0; fsm.repBuf = []; fsm.repStartMs = ts; }
     } else fsm.debounceCount = 0;
@@ -223,6 +233,42 @@ function scoreForm(repBuf, cfg, bottomFrame) {
   if (valgusFlagged) score -= 3;
   if (leanFlagged) score -= 3;
   return { score: clamp(score, 1, 10), valgusFlagged, leanFlagged, leanDeg, maxOffset };
+}
+
+function liveFrameCheck(lm, fsmPhase, cfg) {
+  const side = pickWorkingSide(lm);
+  const working = workingLandmarks(lm, side);
+
+  if (bothLegsVisible(lm)) {
+    const midlineX = (lm[LM.LANK].x + lm[LM.RANK].x) / 2;
+    const shoW = shoulderWidthOf(lm) || 1e-6;
+    const offL = kneeInwardOffset(lm[LM.LHIP], lm[LM.LKNEE], lm[LM.LANK], midlineX, shoW);
+    const offR = kneeInwardOffset(lm[LM.RHIP], lm[LM.RKNEE], lm[LM.RANK], midlineX, shoW);
+    if (Math.max(offL, offR) > cfg.valgusThreshold) return cfg.issueLines.valgus;
+  }
+
+  const torso = { x: working.shoulder.x - working.hip.x, y: working.shoulder.y - working.hip.y };
+  const torsoLen = Math.hypot(torso.x, torso.y);
+  const leanDeg = torsoLen < 1e-6 ? 0 : Math.acos(clamp(-torso.y / torsoLen, -1, 1)) * 180 / Math.PI;
+  if (leanDeg > cfg.leanThreshold) return cfg.issueLines.lean;
+
+  if (fsmPhase === 'bottom') {
+    const kneeAngle = angleAt(working.hip, working.knee, working.ankle);
+    if (kneeAngle != null && kneeAngle > cfg.romAngleBottom + 25) return cfg.issueLines.rom;
+  }
+
+  return null;
+}
+
+function repFeedback(r, cfg) {
+  const issues = [];
+  if (r.rom.score <= 4) issues.push(cfg.issueLines.rom);
+  if (r.form.valgusFlagged) issues.push(cfg.issueLines.valgus);
+  if (r.form.leanFlagged) issues.push(cfg.issueLines.lean);
+  if (r.stability.score <= 4) issues.push(cfg.issueLines.stability);
+  if (r.speed.score <= 4) issues.push(cfg.issueLines.speed);
+  if (!issues.length) return { text: cfg.positiveLines[Math.floor(Math.random() * cfg.positiveLines.length)], warn: false };
+  return { text: issues.slice(0, 2).join(' '), warn: true };
 }
 
 // ── Test runner ────────────────────────────────────────────────────────────────
@@ -368,6 +414,86 @@ function pt(x, y) { return { x, y }; }
 
   assert('repFsm — one full squat cycle completes exactly one rep', completedCount === 1, `got ${completedCount}`);
   assert('repFsm — FSM returns to standing after the cycle', fsm.fsmState === 'standing', `fsmState=${fsm.fsmState}`);
+})();
+
+// ── Test: rep-detection FSM with a SLOW, controlled descent — regression test for the
+// baseline-chasing bug (topBaselineY previously kept adapting every 'standing' frame regardless
+// of whether the body was actually moving, so a slow enough descent could get "absorbed" into
+// the baseline before ever crossing DESCEND_DELTA, meaning a controlled rep was never counted).
+// A first attempt at this fix (gate adaptation on a small velocity threshold) turned out to only
+// push the failure point out to ~3s descents rather than eliminating it — verified by a
+// standalone simulation sweeping ramp speeds from 0.5s to 20s, which is what led to the current
+// approach: clamp the baseline's adaptation direction (only ever move it toward a smaller-y
+// "more upright" position, never toward a larger-y "more depth" one) instead of gating on speed
+// at all. That simulation confirmed detection holds at every tested ramp length; this test covers
+// one representative very slow case (150 frames ≈ 5s, well beyond any realistic squat tempo). ──
+(function testRepFsmSlowDescent() {
+  function makeLandmarks(depth) {
+    const lm = new Array(33);
+    const mk = (x, y) => ({ x, y, visibility: 1 });
+    lm[LM.LSHO] = mk(0.45, 0.2); lm[LM.RSHO] = mk(0.55, 0.2);
+    const hipY = 0.5 + depth * 0.15;
+    lm[LM.LHIP] = mk(0.45, hipY); lm[LM.RHIP] = mk(0.55, hipY);
+    lm[LM.LKNEE] = mk(0.45, 0.75); lm[LM.RKNEE] = mk(0.55, 0.75);
+    lm[LM.LANK] = mk(0.45, 0.95); lm[LM.RANK] = mk(0.55, 0.95);
+    return lm;
+  }
+  const fsm = newFsm();
+  let completedCount = 0, ts = 0;
+  function feed(depth) { ts += 33; if (tickFsm(fsm, makeLandmarks(depth), ts)) completedCount++; }
+  const RAMP = 150; // ~5s at 30fps
+
+  for (let i = 0; i < 10; i++) feed(0);                // settle
+  for (let i = 1; i <= RAMP; i++) feed(i / RAMP);       // very slow descending ramp
+  for (let i = 0; i < 5; i++) feed(1);                  // bottom hold
+  for (let i = RAMP; i >= 0; i--) feed(i / RAMP);        // very slow ascending ramp
+  for (let i = 0; i < 10; i++) feed(0);                  // standing settle
+
+  assert('repFsm — a very slow (~5s), controlled squat still completes exactly one rep', completedCount === 1, `got ${completedCount}`);
+})();
+
+// ── Test: liveFrameCheck — real-time corrective cues ─────────────────────────────
+(function testLiveFrameCheck() {
+  const shoW = 0.2;
+  function mk(x, y, vis = 1) { return { x, y, visibility: vis }; }
+  function baseLm() {
+    const lm = new Array(33);
+    lm[LM.LSHO] = mk(0.4, 0.2); lm[LM.RSHO] = mk(0.6, 0.2);
+    lm[LM.LHIP] = mk(0.4, 0.5); lm[LM.RHIP] = mk(0.6, 0.5);
+    lm[LM.LKNEE] = mk(0.4, 0.7); lm[LM.RKNEE] = mk(0.6, 0.7);
+    lm[LM.LANK] = mk(0.4, 0.9); lm[LM.RANK] = mk(0.6, 0.9);
+    return lm;
+  }
+
+  const clean = baseLm();
+  assert('liveFrameCheck — no issues returns null', liveFrameCheck(clean, 'descending', SQUAT_EXERCISE) === null);
+
+  const valgus = baseLm();
+  valgus[LM.LKNEE] = mk(0.46, 0.7); // caved inward
+  assert('liveFrameCheck — valgus returns the knee-alignment cue', liveFrameCheck(valgus, 'descending', SQUAT_EXERCISE) === SQUAT_EXERCISE.issueLines.valgus);
+
+  const leaning = baseLm();
+  leaning[LM.LSHO] = mk(0.65, 0.35); leaning[LM.RSHO] = mk(0.85, 0.35); // both shoulders shifted forward/down
+  assert('liveFrameCheck — excessive lean returns the chest-up cue', liveFrameCheck(leaning, 'descending', SQUAT_EXERCISE) === SQUAT_EXERCISE.issueLines.lean);
+
+  const shallow = baseLm();
+  shallow[LM.LHIP] = mk(0.4, 0.55); shallow[LM.RHIP] = mk(0.6, 0.55); // barely dipped
+  assert('liveFrameCheck — shallow depth only flagged once phase reaches "bottom"', liveFrameCheck(shallow, 'descending', SQUAT_EXERCISE) === null);
+  assert('liveFrameCheck — shallow depth at "bottom" returns the depth cue', liveFrameCheck(shallow, 'bottom', SQUAT_EXERCISE) === SQUAT_EXERCISE.issueLines.rom);
+})();
+
+// ── Test: repFeedback — warn flag drives the red/neutral color choice ────────────
+(function testRepFeedbackWarn() {
+  const cleanRep = { rom: { score: 9 }, form: { valgusFlagged: false, leanFlagged: false }, stability: { score: 9 }, speed: { score: 9 } };
+  const flaggedRep = { rom: { score: 3 }, form: { valgusFlagged: true, leanFlagged: false }, stability: { score: 9 }, speed: { score: 9 } };
+
+  const cleanFb = repFeedback(cleanRep, SQUAT_EXERCISE);
+  const flaggedFb = repFeedback(flaggedRep, SQUAT_EXERCISE);
+
+  assert('repFeedback — clean rep is not flagged as a warning', cleanFb.warn === false);
+  assert('repFeedback — clean rep text comes from the positive-line pool', SQUAT_EXERCISE.positiveLines.includes(cleanFb.text));
+  assert('repFeedback — flagged rep is marked as a warning', flaggedFb.warn === true);
+  assert('repFeedback — flagged rep text is an actionable cue, not just a diagnosis', flaggedFb.text.includes(SQUAT_EXERCISE.issueLines.rom));
 })();
 
 // ── Summary ───────────────────────────────────────────────────────────────────

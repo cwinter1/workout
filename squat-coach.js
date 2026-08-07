@@ -24,7 +24,23 @@ const SQUAT_EXERCISE = {
   valgusThreshold: 0.06, // normalized inward-knee-deviation threshold (shoulder-widths)
   leanThreshold: 45,     // degrees from vertical, torso lean flag
   positiveLines: ['Clean rep.', 'Solid rep. No flags.', 'Good depth. Controlled.', 'Consistent rep.'],
+  // Corrective copy, not just diagnosis — "what to do about it," not only "what went wrong."
+  // Single source of truth used by both the live in-rep warning and the post-rep feedback line.
+  issueLines: {
+    rom: 'Go lower — aim for thighs parallel to the ground.',
+    valgus: 'Knees caving in — push them out over your toes.',
+    lean: 'Leaning forward — keep your chest up.',
+    stability: 'Steady the bottom — brace your core.',
+    speed: 'Slow down — control the descent.',
+    form: 'Focus on knee alignment and torso lean next set.', // summary-level catch-all for form
+  },
 };
+
+// Squat Coach only — not added to shared.js's T object. T has no red/warning color and is the
+// shared design system for every program (AM/Office); a red "you're doing this wrong" indicator
+// is specific to this feature's live-form-correction request and doesn't belong on the shared
+// palette. See memory/squat_coach.md.
+const WARN_COLOR = '#c9564a';
 
 // ═══════════════════════════════════════════════════════
 // PURE MATH HELPERS — no DOM, no globals besides Math. Kept standalone and side-effect-free so
@@ -161,7 +177,19 @@ function tickFsm(fsm, lm, ts) {
   let completed = null;
 
   if (fsm.fsmState === 'standing') {
-    fsm.topBaselineY += (smoothedY - fsm.topBaselineY) * 0.05; // slow EMA — self-calibrates to stance/distance
+    // Only let the baseline adapt toward a NEW, higher (smaller-y) standing position — never
+    // toward a larger-y value, which is exactly what a descent looks like. Previously this ran
+    // unconditionally every 'standing' frame, so the baseline kept chasing the hip position even
+    // during a real descent (before the debounce threshold below had a chance to trip); for
+    // anything but a fast squat this absorbed the delta fast enough that DESCEND_DELTA was never
+    // crossed at all, so no rep was ever detected. This directional clamp still lets the baseline
+    // self-calibrate (e.g. the user repositions closer to the camera, or straightens up more than
+    // before) while making it impossible for a descent — of ANY speed — to drag the baseline down
+    // with it: once smoothedY exceeds the baseline, adaptation simply stops until they're back
+    // above it. Verified against ramps from 0.5s to 20s in a standalone simulation.
+    if (smoothedY < fsm.topBaselineY) {
+      fsm.topBaselineY += (smoothedY - fsm.topBaselineY) * 0.05;
+    }
     if (smoothedY - fsm.topBaselineY > DESCEND_DELTA) {
       if (++fsm.debounceCount >= DEBOUNCE_FRAMES) {
         fsm.fsmState = 'descending'; fsm.debounceCount = 0; fsm.repBuf = []; fsm.repStartMs = ts;
@@ -263,15 +291,49 @@ function scoreForm(repBuf, cfg, bottomFrame) {
   return { score: clamp(score, 1, 10), valgusFlagged, leanFlagged, leanDeg, maxOffset };
 }
 
+// Live, per-frame corrective check while a rep is actively in progress (fsmPhase !== 'standing')
+// — deliberately more reactive/noisier than the debounced per-rep checks above (single-frame
+// threshold, no multi-frame debounce). That's an acceptable tradeoff for a live "you're doing
+// this wrong right now" indicator, where a brief flicker costs far less than the rep-scoring
+// FSM's false transitions would. Returns a corrective line from cfg.issueLines, or null.
+function liveFrameCheck(lm, fsmPhase, cfg) {
+  const side = pickWorkingSide(lm);
+  const working = workingLandmarks(lm, side);
+
+  if (bothLegsVisible(lm)) {
+    const midlineX = (lm[LM.LANK].x + lm[LM.RANK].x) / 2;
+    const shoW = shoulderWidthOf(lm) || 1e-6;
+    const offL = kneeInwardOffset(lm[LM.LHIP], lm[LM.LKNEE], lm[LM.LANK], midlineX, shoW);
+    const offR = kneeInwardOffset(lm[LM.RHIP], lm[LM.RKNEE], lm[LM.RANK], midlineX, shoW);
+    if (Math.max(offL, offR) > cfg.valgusThreshold) return cfg.issueLines.valgus;
+  }
+
+  const torso = { x: working.shoulder.x - working.hip.x, y: working.shoulder.y - working.hip.y };
+  const torsoLen = Math.hypot(torso.x, torso.y);
+  const leanDeg = torsoLen < 1e-6 ? 0 : Math.acos(clamp(-torso.y / torsoLen, -1, 1)) * 180 / Math.PI;
+  if (leanDeg > cfg.leanThreshold) return cfg.issueLines.lean;
+
+  // Only meaningful once descent has stopped (fsm reached 'bottom') — before that the user is
+  // still on the way down and hasn't reached their deepest point yet.
+  if (fsmPhase === 'bottom') {
+    const kneeAngle = angleAt(working.hip, working.knee, working.ankle);
+    if (kneeAngle != null && kneeAngle > cfg.romAngleBottom + 25) return cfg.issueLines.rom;
+  }
+
+  return null;
+}
+
+// Returns { text, warn } — warn=true means at least one issue was flagged, which callers use to
+// decide whether to color the feedback text WARN_COLOR (red) or the neutral sub color.
 function repFeedback(r, cfg) {
   const issues = [];
-  if (r.rom.score <= 4) issues.push('Not reaching full depth.');
-  if (r.form.valgusFlagged) issues.push('Knees tracking inward.');
-  if (r.form.leanFlagged) issues.push('Leaning forward more than expected.');
-  if (r.stability.score <= 4) issues.push('Noticeable sway at the bottom.');
-  if (r.speed.score <= 4) issues.push('Movement was jerky, not controlled.');
-  if (!issues.length) return cfg.positiveLines[Math.floor(Math.random() * cfg.positiveLines.length)];
-  return issues.slice(0, 2).join(' ');
+  if (r.rom.score <= 4) issues.push(cfg.issueLines.rom);
+  if (r.form.valgusFlagged) issues.push(cfg.issueLines.valgus);
+  if (r.form.leanFlagged) issues.push(cfg.issueLines.lean);
+  if (r.stability.score <= 4) issues.push(cfg.issueLines.stability);
+  if (r.speed.score <= 4) issues.push(cfg.issueLines.speed);
+  if (!issues.length) return { text: cfg.positiveLines[Math.floor(Math.random() * cfg.positiveLines.length)], warn: false };
+  return { text: issues.slice(0, 2).join(' '), warn: true };
 }
 
 // Scores one completed rep's frame buffer end-to-end.
@@ -282,7 +344,9 @@ function scoreRep(repBuf, cfg) {
   const form = scoreForm(repBuf, cfg, rom.bottomFrame);
   const overall = Math.round(((rom.score + stability.score + speed.score + form.score) / 4) * 10) / 10;
   const rep = { ts: repBuf[repBuf.length - 1].ts, rom, stability, speed, form, overall };
-  rep.feedback = repFeedback(rep, cfg);
+  const fb = repFeedback(rep, cfg);
+  rep.feedback = fb.text;
+  rep.hasIssue = fb.warn;
   return rep;
 }
 
@@ -464,11 +528,12 @@ function updateRepCounterText() {
 function updateChip(chipEl, score) {
   if (!chipEl) return;
   const good = score != null && score >= 8;
+  const bad = score != null && score <= 4;
   chipEl._val.textContent = score == null ? '—' : String(score);
-  chipEl._box.style.background = good ? T.accent : T.pill;
-  chipEl._val.style.color = good ? T.accentT : T.fg;
+  chipEl._box.style.background = good ? T.accent : bad ? WARN_COLOR : T.pill;
+  chipEl._val.style.color = good ? T.accentT : bad ? '#fff' : T.fg;
   const lbl = chipEl.firstChild;
-  if (lbl) lbl.style.color = good ? T.accentT : T.mono;
+  if (lbl) lbl.style.color = good ? T.accentT : bad ? '#fff' : T.mono;
 }
 
 function updateLiveChips(rep) {
@@ -476,7 +541,10 @@ function updateLiveChips(rep) {
   updateChip(chipStabilityEl, rep.stability.score);
   updateChip(chipSpeedEl, rep.speed.score);
   updateChip(chipFormEl, rep.form.score);
-  if (feedbackEl) feedbackEl.textContent = rep.feedback;
+  if (feedbackEl) {
+    feedbackEl.textContent = rep.feedback;
+    feedbackEl.style.color = rep.hasIssue ? WARN_COLOR : T.sub;
+  }
 }
 
 // ─────────────────────────────────────────────────────
@@ -487,12 +555,14 @@ function avgOf(reps, pick) {
   return Math.round((reps.reduce((a, r) => a + pick(r), 0) / reps.length) * 10) / 10;
 }
 
-function summaryFeedback(avgs) {
-  const dims = [['depth', avgs.rom], ['stability', avgs.stability], ['speed control', avgs.speed], ['form', avgs.form]];
+function summaryFeedback(avgs, cfg) {
+  const dims = [
+    ['rom', avgs.rom], ['stability', avgs.stability], ['speed', avgs.speed], ['form', avgs.form],
+  ];
   dims.sort((a, b) => a[1] - b[1]);
   const lines = [];
   if (avgs.overall >= 7) lines.push('Consistent set.');
-  if (dims[0][1] < 7) lines.push(`${dims[0][0][0].toUpperCase()}${dims[0][0].slice(1)} was the main gap this set.`);
+  if (dims[0][1] < 7) lines.push(cfg.issueLines[dims[0][0]]);
   if (!lines.length) lines.push('Set logged.');
   return lines.join(' ');
 }
@@ -527,7 +597,8 @@ function renderSummary() {
     const c = el('div', `background:${T.card};border:1px solid ${T.hairline};border-radius:6px;padding:14px;`);
     const l = el('div', `font-family:${T.mono_ff};font-size:10px;color:${T.mono};letter-spacing:1.5px;text-transform:uppercase;`);
     l.textContent = label;
-    const v = el('div', `font-family:${T.display};font-weight:700;font-size:24px;margin-top:6px;`);
+    const good = reps.length && val >= 8, bad = reps.length && val <= 4;
+    const v = el('div', `font-family:${T.display};font-weight:700;font-size:24px;margin-top:6px;color:${good ? T.accent : bad ? WARN_COLOR : T.fg};`);
     v.textContent = reps.length ? val : '—';
     c.append(l, v);
     return c;
@@ -535,7 +606,7 @@ function renderSummary() {
   grid.append(mkStatCard('ROM / Depth', avgs.rom), mkStatCard('Stability', avgs.stability), mkStatCard('Speed', avgs.speed), mkStatCard('Form', avgs.form));
 
   const feedbackCard = el('div', `padding:14px 16px;background:${T.pill};border-radius:6px;font-size:14px;color:${T.fg};line-height:1.5;`);
-  feedbackCard.textContent = reps.length ? summaryFeedback(avgs) : 'No reps were detected in this set.';
+  feedbackCard.textContent = reps.length ? summaryFeedback(avgs, SQUAT_EXERCISE) : 'No reps were detected in this set.';
 
   const repeatBtn = el('button', `appearance:none;border:none;background:${T.accent};color:${T.accentT};border-radius:6px;padding:18px;font-family:${T.display};font-weight:700;font-size:15px;letter-spacing:0.5px;text-transform:uppercase;width:100%;`);
   repeatBtn.textContent = 'Repeat Set';
@@ -650,10 +721,21 @@ function onPoseResults(results) {
     const side = pickWorkingSide(lm);
     const working = workingLandmarks(lm, side);
     const angle = angleAt(working.hip, working.knee, working.ankle);
-    debugEl.textContent = `side:${side} kneeAngle:${angle ? angle.toFixed(1) : '—'} fsm:${fsm.fsmState} coreVis:${coreVis.toFixed(2)}`;
+    const baseline = fsm.topBaselineY == null ? '—' : fsm.topBaselineY.toFixed(3);
+    debugEl.textContent = `side:${side} kneeAngle:${angle ? angle.toFixed(1) : '—'} fsm:${fsm.fsmState} coreVis:${coreVis.toFixed(2)} baseline:${baseline}`;
   }
 
   if (state.setActive) {
+    // Live corrective warning while a rep is actively in progress — captured on the phase
+    // *before* tickFsm runs, so a rep that completes on this exact frame isn't briefly
+    // overwritten with a stale live warning (the post-rep feedback below takes precedence).
+    const phaseBeforeTick = fsm.fsmState;
+    if (phaseBeforeTick !== 'standing' && feedbackEl) {
+      const warn = liveFrameCheck(lm, phaseBeforeTick, SQUAT_EXERCISE);
+      feedbackEl.textContent = warn || 'In progress…';
+      feedbackEl.style.color = warn ? WARN_COLOR : T.sub;
+    }
+
     const completedRep = tickFsm(fsm, lm, performance.now());
     if (completedRep) {
       const rep = scoreRep(completedRep, SQUAT_EXERCISE);
@@ -678,6 +760,7 @@ function beginSet() {
   if (finishSetBtn) finishSetBtn.style.display = 'block';
   const chipsRow = chipRomEl ? chipRomEl.parentElement : null;
   if (chipsRow) chipsRow.style.display = 'flex';
+  if (feedbackEl) { feedbackEl.textContent = 'Ready — start your first squat.'; feedbackEl.style.color = T.sub; }
 }
 
 function finishSet() {
