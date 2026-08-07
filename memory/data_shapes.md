@@ -148,10 +148,14 @@ payload types, including `measurement` (whose own stored `entry.date` is a full 
 `new Date().toISOString()`) — so a Sheet grouping/pivoting by date works the same way regardless of
 which payload type a row came from.
 
-**The Apps Script endpoint itself is not part of this repo** — it's an external script you host in
-your own Google account (Chris's), reached only via the pasted `/exec` URL. Extending which
-payload `type`s exist here doesn't automatically make your script route/columnize them; the script
-side needs its own update to handle `daily_routine`/`measurement` rows (e.g. writing to separate
-sheet tabs keyed on `type`, or parsing `resultsJson`) if you want them to land somewhere useful
-rather than just failing silently or landing in whatever the script's default/catch-all behavior
-is.
+**The Apps Script source lives in this repo, at `apps-script/Code.gs`** — checked in as the source
+of truth, but it only reaches the live endpoint via a manual copy-paste into the actual Apps
+Script editor (bound to your Google Sheet), followed by cutting a *new deployment version*
+(Deploy → Manage deployments → Edit existing Web app deployment → Version: New version → Deploy).
+Editing `apps-script/Code.gs` in this repo — or even saving/running it inside the Apps Script
+editor without redeploying — does **not** change what the live `/exec` URL serves; the `/exec` URL
+itself stays stable across versions, so `mf.syncUrl` in the app never needs to change when the
+script is updated. `Code.gs` already routes all 3 payload `type`s (`session`/`daily_routine`/
+`measurement`) into 3 separate sheet tabs, each auto-created with its own header row on first use,
+plus an `Unrouted` catch-all tab for any future `type` this version of the script doesn't know
+about yet.
