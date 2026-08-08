@@ -188,6 +188,55 @@ unverified until a real device test — everything else about this feature, incl
 9-step sequence and the persistence/streak logic, was verified end-to-end in this sandbox with
 MediaPipe stubbed).
 
+## Real-device bug: fast reps missed at realistic phone frame rates (2026-08-07, fixed)
+
+A real Daily Routine session reported skeleton tracking working fine but "counted some, missed
+most" reps for both squat and push-up, plus a telling follow-up detail: "I do squat faster than
+[the app] can count." Investigated by simulating hypotheses against the **actual production
+code** (`form-coach-engine.js` + `exercise-squat.js`, run directly through Node's `vm` module, not
+reimplemented) rather than guessing at a fix blind. Two hypotheses were ruled out first:
+
+1. **Per-frame pose-estimation jitter breaking the debounce** — simulated up to ±0.05 (5% of the
+   coordinate range) random per-frame landmark noise; detection stayed 10/10 at every level. The
+   5-frame moving average (`trackYHist`) already damps this before it reaches the debounce logic.
+2. **A slow/hesitant descent tripping `REP_ABANDON_MS = 8000`** — simulated descents up to 12
+   seconds; the abandon-and-reset does fire, but the FSM re-evaluates `'standing'→'descending'`
+   every frame against current position vs. baseline, so it immediately re-triggers and the rep
+   still completed in every trial.
+
+The user's own framing ("faster than it can count") pointed at the actual cause: **every synthetic
+test in this repo, including both simulations above, stubs `ts` in fixed 33ms increments** (~30fps)
+— but real on-device MediaPipe inference (`modelComplexity: 1`, see `ensurePose()`) can take
+100-300ms per frame on real phone hardware, and `startFrameLoop()`'s `_frameBusy` flag means the
+app never overlaps requests — the *effective* frame rate the FSM ever sees is however long
+inference actually takes, not the display refresh rate. `DEBOUNCE_FRAMES = 4` and
+`BOTTOM_DEBOUNCE_FRAMES = 3` were **frame counts, not time** — at a slow real frame rate, a fast
+rep could complete in real time before enough frames were ever *processed* to satisfy "N
+consecutive frames," even though far more than enough real time had elapsed. Confirmed directly: a
+standalone simulation comparing the pre-fix and post-fix engine on the identical scenario (10 reps
+in a row, 200ms/frame — a realistic on-device inference rate — at a normal ~1-second squat tempo)
+showed the old code detecting only **4/10**, dropping toward **0/10** as rep speed increased
+further, matching "counted some, missed most" and "faster than it can count" exactly.
+
+**Fix**: `form-coach-engine.js`'s `tickFsm()` debounce is now time-based (`DEBOUNCE_MS = 130` /
+`BOTTOM_DEBOUNCE_MS = 100`, chosen to match the old frame counts exactly *at* 33ms/frame, so
+nothing changes at the frame rate every existing test assumes) instead of frame-count-based
+(`fsm.debounceStartMs`, a timestamp, replaces `fsm.debounceCount`). Re-ran every existing
+simulation (jitter, bottom-pause, slow-descent) plus the full committed test suite after the change
+— zero regressions, all still passing. New regression test
+(`testSlowFrameRateFastRepRegression` in `tests/form-coach-flow.html`) exercises this exact
+scenario directly against the shipped engine (200ms/frame, 10 reps, asserts ≥8/10 detected — the
+fix's actual result on that scenario is 9/10; the old code's was 4/10). At the most extreme
+combination tested (300ms/frame *and* a sub-1-second rep, i.e. only 1-2 total processed frames per
+phase) detection is still imperfect (~50-70%) — a genuine information limit (too little data
+regardless of debounce logic), not something a debounce redesign alone can fully close, but far
+better than the near-total failure the old frame-count logic had at that extreme too.
+
+The richer `?debug=1` overlay added while investigating (`fsm:<state> angle:<live angle>
+baseline:<topBaselineY> trackY:<current y>` on daily-routine.js's reps-kind steps, matching
+squat-coach.js's existing detail) stays in place regardless — real diagnostic visibility during a
+live session is valuable on its own, independent of this specific bug.
+
 ## Progress screen deep-link, direct from the AM home screen
 
 The Progress/Evolution screen was originally reachable only one level deep (a button inside

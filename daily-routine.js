@@ -760,7 +760,25 @@ function onPoseResults(results) {
   }
 
   if (state.debug && debugEl) {
-    debugEl.textContent = `step:${state.stepIdx} kind:${step.kind} active:${state.stepActive} coreVis:${coreVis.toFixed(2)}`;
+    // Previously just step/kind/active/coreVis — no FSM/angle detail, unlike squat-coach.js's
+    // fuller overlay. Added after a real-device report (missed reps for both squat and push-up
+    // in a real session) that couldn't be reproduced via simulation against the real code with
+    // two strong hypotheses (per-frame pose jitter, a slow/hesitant descent tripping
+    // REP_ABANDON_MS) — this surfaces the same live fsm-state/angle/baseline data squat-coach.js
+    // already shows, so the next real session gives actual evidence instead of more guessing.
+    let extra = '';
+    if (step.kind === 'reps' && state.stepActive) {
+      const ex = REP_EXERCISES[step.exercise];
+      const trackPt = ex.trackFn(lm);
+      const scale = shoulderWidthOf(lm) || 1e-6;
+      const sample = ex.sampleFn(lm, performance.now(), trackPt, scale);
+      const angleVal = sample && ex.cfg.angleField ? sample[ex.cfg.angleField] : null;
+      const baseline = stepFsm.topBaselineY == null ? '—' : stepFsm.topBaselineY.toFixed(3);
+      extra = ` fsm:${stepFsm.fsmState} angle:${angleVal != null ? angleVal.toFixed(1) : '—'} baseline:${baseline} trackY:${trackPt.y.toFixed(3)}`;
+    } else if (step.kind === 'hold' && state.stepActive) {
+      extra = ` holdMs:${stepHold.activeMs}`;
+    }
+    debugEl.textContent = `step:${state.stepIdx} kind:${step.kind} active:${state.stepActive} coreVis:${coreVis.toFixed(2)}${extra}`;
   }
 
   if (!state.stepActive) return;

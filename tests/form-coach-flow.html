@@ -141,6 +141,35 @@ function makeSquatLandmarks(depth) {
   assert('tickFsm — a very slow (~5s) rep still completes exactly once', completedCount === 1, `got ${completedCount}`);
 })();
 
+// Regression test for a real-device report (2026-08-07, see memory/daily_routine.md): skeleton
+// tracking worked, but squat/push-up rep counting missed most real reps. Every synthetic test
+// above (including the two directly above this one) always stubs `ts` in fixed 33ms increments,
+// matching ~30fps -- but on-device MediaPipe inference (modelComplexity:1) can realistically take
+// 100-300ms per frame, and the old DEBOUNCE_FRAMES/BOTTOM_DEBOUNCE_FRAMES thresholds (4 and 3
+// consecutive FRAMES, not milliseconds) meant a fast rep at a slow real frame rate could complete
+// in real time before enough frames were ever processed to satisfy the debounce -- confirmed via
+// a standalone simulation comparing the pre-fix and post-fix engine directly: at a realistic
+// 200ms/frame rate and a normal ~1s squat tempo (10 reps in a row), the OLD frame-count debounce
+// detected only 4/10 reps; the fix (DEBOUNCE_MS/BOTTOM_DEBOUNCE_MS -- the SAME threshold in
+// elapsed real time, chosen to match the old frame counts exactly at 33ms/frame, so nothing
+// changes at the frame rate every other test in this file assumes) detected 9/10 on the identical
+// scenario. This test exercises that scenario directly against the shipped engine.
+(function testSlowFrameRateFastRepRegression() {
+  const fsm = newFsm();
+  let ts = 0, completedCount = 0;
+  const FRAME_MS = 200;      // realistic on-device MediaPipe inference latency, not the 33ms/~30fps every other test here assumes
+  const FRAMES_PER_PHASE = 2; // ~1.2s total rep (descend+hold+ascend) at 200ms/frame -- a normal, not even especially fast, squat tempo
+  function feed(depth) { ts += FRAME_MS; if (tickFsm(fsm, makeSquatLandmarks(depth), ts, hipCenterOf, shoulderWidthOf, squatFrameSample)) completedCount++; }
+  for (let r = 0; r < 10; r++) {
+    for (let i = 0; i < 5; i++) feed(0); // a real between-reps pause is longer than this; deliberately tight to stress the baseline settling too
+    for (let i = 1; i <= FRAMES_PER_PHASE; i++) feed(i / FRAMES_PER_PHASE);
+    for (let i = 0; i < FRAMES_PER_PHASE; i++) feed(1);
+    for (let i = FRAMES_PER_PHASE; i >= 0; i--) feed(i / FRAMES_PER_PHASE);
+  }
+  assert('tickFsm — fast reps at a realistic slow (200ms) frame rate mostly detect (was 4/10 before the time-based debounce fix)',
+    completedCount >= 8, `got ${completedCount}/10`);
+})();
+
 // ═══════════════════════════════════════════════════════
 // ENGINE — generic scorers
 // ═══════════════════════════════════════════════════════
