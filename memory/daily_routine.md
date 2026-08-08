@@ -188,6 +188,42 @@ unverified until a real device test — everything else about this feature, incl
 9-step sequence and the persistence/streak logic, was verified end-to-end in this sandbox with
 MediaPipe stubbed).
 
+## Real-device report: missed reps on both squat and push-up (2026-08-07, unresolved)
+
+A real Daily Routine session reported skeleton tracking working fine but "counted some, missed
+most" reps for both squat and push-up — a real regression against the earlier-confirmed rep
+counting (decision history in `memory/form_coach.md`'s baseline-chasing fix). Investigated two
+strong hypotheses via simulation against the **actual production code** (`form-coach-engine.js` +
+`exercise-squat.js`, run directly through Node's `vm` module, not reimplemented) rather than
+guessing at a fix blind:
+
+1. **Per-frame pose-estimation jitter breaking the debounce.** All of this repo's existing
+   synthetic tests feed perfectly smooth, monotonic landmark sequences — real MediaPipe output on
+   a real phone is noisier per-frame. Simulated a squat descent/hold/ascent with random per-frame
+   landmark jitter up to ±0.05 (5% of the 0-1 coordinate range, well above what real tracking noise
+   typically looks like) — detection stayed 10/10 at every noise level tested. Ruled out: the
+   5-frame moving average (`trackYHist`) already damps this level of noise before it reaches the
+   debounce logic.
+2. **A slow/hesitant descent tripping `REP_ABANDON_MS = 8000`.** Someone getting back into fitness
+   (this app's explicit framing) doing a careful, paused, or hesitant descent could plausibly spend
+   more than 8 real seconds in the `'descending'` state before ever reaching `'bottom'`. Simulated
+   descents up to 12 seconds — the abandon-and-reset does fire, but since depth is still increasing
+   past the reset point, `'standing'→'descending'` immediately re-triggers on the very next frame
+   (the FSM re-evaluates against current position vs. baseline every tick, not just on a
+   `'standing'`-state entry event) — the rep still completed in every trial.
+
+Neither hypothesis reproduced a failure. Rather than ship a speculative fix for an unconfirmed root
+cause (which risks masking the real problem or introducing a new one), `onPoseResults()`'s debug
+overlay (`?debug=1`) was extended to match `squat-coach.js`'s richer version — previously just
+`step:X kind:Y active:Z coreVis:N`, now also `fsm:<state> angle:<live angle> baseline:<topBaselineY>
+trackY:<current y>` while a reps-kind step is active (`hold:<activeMs>` for hold-kind). This is the
+concrete, low-risk next step: real diagnostic data from an actual failing session (does `fsm:`
+ever leave `standing`? does `angle:` ever reach depth-threshold territory? does `baseline:` drift
+unexpectedly?) is the only way to distinguish a genuine remaining logic bug from something outside
+this file entirely (real MediaPipe tracking quality on that specific phone/lighting/framing for
+these specific dynamic movements, which no synthetic simulation can represent). **Not yet
+resolved** — revisit once `?debug=1` data from a real session is available.
+
 ## Progress screen deep-link, direct from the AM home screen
 
 The Progress/Evolution screen was originally reachable only one level deep (a button inside
