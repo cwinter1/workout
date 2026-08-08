@@ -170,6 +170,50 @@ function makeSquatLandmarks(depth) {
     completedCount >= 8, `got ${completedCount}/10`);
 })();
 
+// Regression test for a second real-device finding on the same report above: even after the
+// time-based debounce fix (the test directly above), a real squat set still counted exactly one
+// rep total, then nothing for the rest of an ~11.7s clip covering roughly 4 real squat cycles --
+// a pattern the debounce fix alone cannot explain (that fix only degrades detection gradually at
+// speed; it doesn't explain a hard stop after precisely one rep). Root-caused by reading tickFsm's
+// 'bottom'/'ascending' branches directly: only 'descending' had a REP_ABANDON_MS safety-net check
+// -- 'bottom' and 'ascending' had none at all. Confirmed via a standalone simulation that feeding
+// tickFsm a landmark sequence whose velocity never resolves (a real risk at sparse real-device
+// frame rates, since the FSM's velocity signal is a 5-frame moving average that can flatten out
+// entirely) left the FSM stuck in 'bottom' -- or 'ascending' -- FOREVER, unlike 'descending',
+// which always self-corrected within REP_ABANDON_MS. Fixed by adding the identical guard to both
+// remaining states.
+(function testStuckBottomAndAscendingRecoverViaAbandonTimeout() {
+  function stateChangesWhileStalled(startState, depth, repBufSeed) {
+    const fsm = newFsm();
+    fsm.fsmState = startState; fsm.repStartMs = 0; fsm.topBaselineY = 0.5;
+    if (repBufSeed) fsm.repBuf = repBufSeed;
+    let ts = 0;
+    const transitions = [];
+    for (let i = 0; i < 40; i++) {
+      ts += 300;
+      const before = fsm.fsmState;
+      tickFsm(fsm, makeSquatLandmarks(depth), ts, hipCenterOf, shoulderWidthOf, squatFrameSample);
+      if (fsm.fsmState !== before) transitions.push({ ts, to: fsm.fsmState });
+    }
+    return transitions;
+  }
+
+  // A frozen deep-squat reading: velocity settles to exactly 0 once the moving-average window
+  // fills with identical samples, so 'bottom' -> 'ascending' (which requires velocity < 0,
+  // strictly) can never fire on its own.
+  const bottomTransitions = stateChangesWhileStalled('bottom', 0.8);
+  assert('tickFsm — a stalled "bottom" phase (velocity never goes negative) eventually recovers to standing, not stuck forever',
+    bottomTransitions.some((t) => t.to === 'standing'), `transitions=${JSON.stringify(bottomTransitions)}`);
+  assert('tickFsm — the stalled-bottom recovery happens within REP_ABANDON_MS, not later',
+    bottomTransitions.length > 0 && bottomTransitions[0].ts <= 8300, `first transition at ts=${bottomTransitions[0] && bottomTransitions[0].ts}`);
+
+  // A frozen mid-depth reading that never comes back within RETURN_DELTA of the 0.5 baseline, so
+  // 'ascending' -> 'standing' can never fire on its own either.
+  const ascendingTransitions = stateChangesWhileStalled('ascending', 0.6, [{ ts: 0 }]);
+  assert('tickFsm — a stalled "ascending" phase (never returns within RETURN_DELTA) eventually recovers to standing, not stuck forever',
+    ascendingTransitions.some((t) => t.to === 'standing'), `transitions=${JSON.stringify(ascendingTransitions)}`);
+})();
+
 // ═══════════════════════════════════════════════════════
 // ENGINE — generic scorers
 // ═══════════════════════════════════════════════════════

@@ -107,6 +107,62 @@ inherits it, same as bug #1). `tests/form-coach-flow.html` has a dedicated regre
 (`testSlowFrameRateFastRepRegression`) exercising the exact 200ms/frame scenario against the
 shipped engine.
 
+## Real-device bug #3 (Squat Coach, 2026-08-08): FSM permanently stuck after exactly one rep
+
+A third real-device rep-counting bug, found via a video the user recorded of the Squat Coach
+screen mid-set (analyzed by extracting frames with `ffmpeg`, since the Read tool can't open binary
+video files directly — a genuinely new investigative technique this session, not previously used
+in this repo). Confirmed via the GitHub API that bug #2's fix (`a8297ed`, merged as PR #7 at
+2026-08-08T04:50Z) was already live on GitHub Pages a full ~33 minutes before this video was
+recorded (deployment `f5d8815` completed at 04:51Z; the video's own file timestamp is 05:24Z) — so
+this is a genuinely different, additional bug, not a stale-deploy false alarm.
+
+The video showed the rep counter reading "1 REP" for the entire ~11.7s clip, completely
+unchanged, while the user visibly performed at least 3 more full squat-and-stand cycles on camera
+(confirmed frame-by-frame via an `ffmpeg` contact sheet). Not a gradual undercount and not a
+display-update delay (as the user's own description — "after a couple of seconds I see the number"
+— suggested it might be) — the counter was frozen at a stale value the entire time. That exact
+pattern (exactly one rep counted, then total silence for the rest of the set) doesn't fit either of
+the two bugs above; both would produce scattered, gradually-worse misses, not a hard stop after
+precisely one success.
+
+**Root cause (confirmed via simulation directly against the shipped engine, both before and after
+the earlier debounce-timing fix)**: `tickFsm`'s `REP_ABANDON_MS` safety net — the "give up on a
+stuck rep after 8s" guard — was only ever wired into the `'descending'` branch. `'bottom'` and
+`'ascending'` had no such guard at all. A standalone simulation forcing the FSM into `'bottom'`
+(constant/frozen landmark input, so the 5-frame moving-average velocity signal settles to exactly
+0 and never satisfies `velocity < 0`) confirmed it stays stuck there for 30+ simulated seconds with
+zero recovery — unlike `'descending'`, which has always self-corrected within `REP_ABANDON_MS`.
+The same is true of `'ascending'` (a landmark reading that never returns within `RETURN_DELTA` of
+the standing baseline). On a real device, a stall like this is a real risk whenever the velocity
+signal doesn't cleanly resolve for a stretch of frames — exactly the kind of noise sparse real
+frame timing (bug #2's finding) makes more likely, not less.
+
+A broader sweep (varying simulated frame rate 200ms–1200ms against a realistic ~1.5–2s squat
+tempo) also showed detection collapsing hard past ~300ms/frame even with bug #2's fix in place —
+consistent with, though not conclusive proof of, real on-device inference sometimes running slower
+than the 100–300ms range bug #2's investigation assumed. That sweep is a much less certain finding
+than the stuck-FSM bug (a short synthetic simulation window doesn't give the abandon-timeout fix
+enough time to fully recover, so it isn't a clean read on real multi-minute-set behavior) — flagged
+here for awareness, not fixed, since real per-frame timing on the user's actual device remains
+unmeasured (no `?debug=1` session log was captured for this report).
+
+**Fix**: added the identical `if (ts - fsm.repStartMs > REP_ABANDON_MS) { fsm.fsmState =
+'standing'; ... }` guard to both `'bottom'` and `'ascending'`, matching `'descending'`'s existing
+pattern exactly. An abandoned rep is silently dropped (never scored), the same as an abandoned
+`'descending'` rep always has been — this was never going to be a clean rep to score anyway. This
+bounds the *maximum* time the FSM can go unresponsive to 8s instead of the rest of the entire set,
+turning "count 1 rep then go silent for the rest of your workout" into "briefly stall, self-heal,
+keep counting." `tests/form-coach-flow.html`'s `testStuckBottomAndAscendingRecoverViaAbandonTimeout`
+forces each state with frozen landmark input and asserts recovery happens within
+`REP_ABANDON_MS`, covering both branches directly.
+
+**Still open**: whether the FSM stalls into `'bottom'`/`'ascending'` often enough on this user's
+real device to still cause a noticeably choppy count even with the 8s self-heal in place. The next
+real-device test should use `squat-coach.html?debug=1` specifically (the `fsm:`/`baseline:` debug
+line already exists for exactly this) so an actual per-frame `fsm:` trace can be read back, instead
+of inferring state from a plain screen recording.
+
 ## Real-device test #1 (same session): live, actionable, red-flagged feedback added
 
 Two related asks after the same test: (1) feedback described what went wrong but not what to do
