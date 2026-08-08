@@ -216,6 +216,11 @@ function tickFsm(fsm, lm, ts, trackFn, scaleFn, sampleFn) {
       if (fsm.debounceStartMs == null) fsm.debounceStartMs = ts;
       if (ts - fsm.debounceStartMs >= BOTTOM_DEBOUNCE_MS) { fsm.fsmState = 'ascending'; fsm.debounceStartMs = null; }
     } else fsm.debounceStartMs = null;
+    // See the identical guard below on 'ascending' and the real-device bug it fixes: without
+    // this, a velocity sign that never resolves (real risk at sparse real-device frame rates —
+    // confirmed via simulation to happen and, unlike 'descending', to never self-correct) leaves
+    // the FSM stuck in 'bottom' forever, silently killing every rep for the rest of the session.
+    if (ts - fsm.repStartMs > REP_ABANDON_MS) { fsm.fsmState = 'standing'; fsm.debounceStartMs = null; fsm.repBuf = []; }
   } else if (fsm.fsmState === 'ascending') {
     pushSample('ascending');
     if (smoothedY - fsm.topBaselineY < RETURN_DELTA) {
@@ -226,6 +231,14 @@ function tickFsm(fsm, lm, ts, trackFn, scaleFn, sampleFn) {
         fsm.repBuf = [];
       }
     } else fsm.debounceStartMs = null;
+    // Real-device bug fix: 'descending' has always had this abandon guard, but 'bottom' and
+    // 'ascending' never did — confirmed via simulation (feeding a stalled/ambiguous-velocity
+    // frame indefinitely) that both states can get permanently stuck with zero recovery path,
+    // exactly matching a real report of a squat set counting one rep, then never counting again
+    // for the rest of the set. This unfinished rep is simply dropped, not scored — an abandoned
+    // rep was never going to be a clean one to score anyway, and "silently drop" matches how a
+    // stalled 'descending' rep has always been handled.
+    if (ts - fsm.repStartMs > REP_ABANDON_MS) { fsm.fsmState = 'standing'; fsm.debounceStartMs = null; fsm.repBuf = []; }
   }
 
   return completed;
