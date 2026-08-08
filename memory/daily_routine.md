@@ -188,41 +188,54 @@ unverified until a real device test — everything else about this feature, incl
 9-step sequence and the persistence/streak logic, was verified end-to-end in this sandbox with
 MediaPipe stubbed).
 
-## Real-device report: missed reps on both squat and push-up (2026-08-07, unresolved)
+## Real-device bug: fast reps missed at realistic phone frame rates (2026-08-07, fixed)
 
 A real Daily Routine session reported skeleton tracking working fine but "counted some, missed
-most" reps for both squat and push-up — a real regression against the earlier-confirmed rep
-counting (decision history in `memory/form_coach.md`'s baseline-chasing fix). Investigated two
-strong hypotheses via simulation against the **actual production code** (`form-coach-engine.js` +
-`exercise-squat.js`, run directly through Node's `vm` module, not reimplemented) rather than
-guessing at a fix blind:
+most" reps for both squat and push-up, plus a telling follow-up detail: "I do squat faster than
+[the app] can count." Investigated by simulating hypotheses against the **actual production
+code** (`form-coach-engine.js` + `exercise-squat.js`, run directly through Node's `vm` module, not
+reimplemented) rather than guessing at a fix blind. Two hypotheses were ruled out first:
 
-1. **Per-frame pose-estimation jitter breaking the debounce.** All of this repo's existing
-   synthetic tests feed perfectly smooth, monotonic landmark sequences — real MediaPipe output on
-   a real phone is noisier per-frame. Simulated a squat descent/hold/ascent with random per-frame
-   landmark jitter up to ±0.05 (5% of the 0-1 coordinate range, well above what real tracking noise
-   typically looks like) — detection stayed 10/10 at every noise level tested. Ruled out: the
-   5-frame moving average (`trackYHist`) already damps this level of noise before it reaches the
-   debounce logic.
-2. **A slow/hesitant descent tripping `REP_ABANDON_MS = 8000`.** Someone getting back into fitness
-   (this app's explicit framing) doing a careful, paused, or hesitant descent could plausibly spend
-   more than 8 real seconds in the `'descending'` state before ever reaching `'bottom'`. Simulated
-   descents up to 12 seconds — the abandon-and-reset does fire, but since depth is still increasing
-   past the reset point, `'standing'→'descending'` immediately re-triggers on the very next frame
-   (the FSM re-evaluates against current position vs. baseline every tick, not just on a
-   `'standing'`-state entry event) — the rep still completed in every trial.
+1. **Per-frame pose-estimation jitter breaking the debounce** — simulated up to ±0.05 (5% of the
+   coordinate range) random per-frame landmark noise; detection stayed 10/10 at every level. The
+   5-frame moving average (`trackYHist`) already damps this before it reaches the debounce logic.
+2. **A slow/hesitant descent tripping `REP_ABANDON_MS = 8000`** — simulated descents up to 12
+   seconds; the abandon-and-reset does fire, but the FSM re-evaluates `'standing'→'descending'`
+   every frame against current position vs. baseline, so it immediately re-triggers and the rep
+   still completed in every trial.
 
-Neither hypothesis reproduced a failure. Rather than ship a speculative fix for an unconfirmed root
-cause (which risks masking the real problem or introducing a new one), `onPoseResults()`'s debug
-overlay (`?debug=1`) was extended to match `squat-coach.js`'s richer version — previously just
-`step:X kind:Y active:Z coreVis:N`, now also `fsm:<state> angle:<live angle> baseline:<topBaselineY>
-trackY:<current y>` while a reps-kind step is active (`hold:<activeMs>` for hold-kind). This is the
-concrete, low-risk next step: real diagnostic data from an actual failing session (does `fsm:`
-ever leave `standing`? does `angle:` ever reach depth-threshold territory? does `baseline:` drift
-unexpectedly?) is the only way to distinguish a genuine remaining logic bug from something outside
-this file entirely (real MediaPipe tracking quality on that specific phone/lighting/framing for
-these specific dynamic movements, which no synthetic simulation can represent). **Not yet
-resolved** — revisit once `?debug=1` data from a real session is available.
+The user's own framing ("faster than it can count") pointed at the actual cause: **every synthetic
+test in this repo, including both simulations above, stubs `ts` in fixed 33ms increments** (~30fps)
+— but real on-device MediaPipe inference (`modelComplexity: 1`, see `ensurePose()`) can take
+100-300ms per frame on real phone hardware, and `startFrameLoop()`'s `_frameBusy` flag means the
+app never overlaps requests — the *effective* frame rate the FSM ever sees is however long
+inference actually takes, not the display refresh rate. `DEBOUNCE_FRAMES = 4` and
+`BOTTOM_DEBOUNCE_FRAMES = 3` were **frame counts, not time** — at a slow real frame rate, a fast
+rep could complete in real time before enough frames were ever *processed* to satisfy "N
+consecutive frames," even though far more than enough real time had elapsed. Confirmed directly: a
+standalone simulation comparing the pre-fix and post-fix engine on the identical scenario (10 reps
+in a row, 200ms/frame — a realistic on-device inference rate — at a normal ~1-second squat tempo)
+showed the old code detecting only **4/10**, dropping toward **0/10** as rep speed increased
+further, matching "counted some, missed most" and "faster than it can count" exactly.
+
+**Fix**: `form-coach-engine.js`'s `tickFsm()` debounce is now time-based (`DEBOUNCE_MS = 130` /
+`BOTTOM_DEBOUNCE_MS = 100`, chosen to match the old frame counts exactly *at* 33ms/frame, so
+nothing changes at the frame rate every existing test assumes) instead of frame-count-based
+(`fsm.debounceStartMs`, a timestamp, replaces `fsm.debounceCount`). Re-ran every existing
+simulation (jitter, bottom-pause, slow-descent) plus the full committed test suite after the change
+— zero regressions, all still passing. New regression test
+(`testSlowFrameRateFastRepRegression` in `tests/form-coach-flow.html`) exercises this exact
+scenario directly against the shipped engine (200ms/frame, 10 reps, asserts ≥8/10 detected — the
+fix's actual result on that scenario is 9/10; the old code's was 4/10). At the most extreme
+combination tested (300ms/frame *and* a sub-1-second rep, i.e. only 1-2 total processed frames per
+phase) detection is still imperfect (~50-70%) — a genuine information limit (too little data
+regardless of debounce logic), not something a debounce redesign alone can fully close, but far
+better than the near-total failure the old frame-count logic had at that extreme too.
+
+The richer `?debug=1` overlay added while investigating (`fsm:<state> angle:<live angle>
+baseline:<topBaselineY> trackY:<current y>` on daily-routine.js's reps-kind steps, matching
+squat-coach.js's existing detail) stays in place regardless — real diagnostic visibility during a
+live session is valuable on its own, independent of this specific bug.
 
 ## Progress screen deep-link, direct from the AM home screen
 

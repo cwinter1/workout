@@ -80,6 +80,33 @@ inherits the fix. `tests/form-coach-flow.html` has a dedicated regression test f
 (`testSlowDescentRegression`, a ~5s synthetic descent) plus a comment walking through why the
 first attempted fix wasn't enough — worth reading before touching this logic again.
 
+## Real-device bug #2 (Daily Routine, 2026-08-07): fast reps missed at realistic phone frame rates
+
+A second, different real-device rep-counting bug, found much later (after the setup check/Progress
+screen/Sheets-sync rounds) — skeleton tracking was fine this time, but reps were "counted some,
+missed most," with the user's own diagnosis nailing it: "I do squat faster than [the app] can
+count." Root cause: **every synthetic test in this repo, including the ones that caught bug #1
+above, stubs `performance.now()`/`ts` in fixed 33ms increments** (~30fps) — but real on-device
+MediaPipe inference (`modelComplexity: 1`) can take 100-300ms per frame on real phone hardware, and
+`startFrameLoop()` never overlaps requests (`_frameBusy`), so the FSM's *effective* frame rate is
+however long inference actually takes. `DEBOUNCE_FRAMES`/`BOTTOM_DEBOUNCE_FRAMES` were **frame
+counts, not time** — at a slow real frame rate, a fast rep could finish in real time before enough
+frames were ever processed to satisfy "N consecutive frames," independent of how much real time
+had elapsed. A direct simulation (pre-fix vs. post-fix engine, identical scenario: 200ms/frame, a
+normal ~1s squat tempo, 10 reps) confirmed it: old code detected 4/10, new code 9/10.
+
+**Fix**: `tickFsm`'s debounce is now time-based — `DEBOUNCE_MS = 130` / `BOTTOM_DEBOUNCE_MS = 100`
+(chosen to match the old frame counts exactly *at* 33ms/frame, so every existing test's assumed
+frame rate sees identical behavior) replace `DEBOUNCE_FRAMES`/`BOTTOM_DEBOUNCE_FRAMES`; `fsm`'s
+`debounceStartMs` (a timestamp, null when the condition isn't currently true) replaces
+`debounceCount`. Full investigation, including the two hypotheses ruled out first (per-frame
+jitter, a slow descent tripping `REP_ABANDON_MS`) and the extent of the fix's remaining limits at
+the most extreme frame-rate/rep-speed combinations, is in `memory/daily_routine.md` (found via a
+Daily Routine session, but the fix lives in the shared engine so every rep-based exercise/consumer
+inherits it, same as bug #1). `tests/form-coach-flow.html` has a dedicated regression test
+(`testSlowFrameRateFastRepRegression`) exercising the exact 200ms/frame scenario against the
+shipped engine.
+
 ## Real-device test #1 (same session): live, actionable, red-flagged feedback added
 
 Two related asks after the same test: (1) feedback described what went wrong but not what to do
@@ -231,7 +258,7 @@ through squat's own landmark shape, the hold-tracker (`newHold`/`tickHold`/`scor
 of the 4 exercises' own config/scoring/live-check functions including a full synthetic FSM cycle
 per rep-based exercise, plus (as of the camera-setup-check/progress-screen round below)
 `daily-routine.js`'s pure persistence/progress-grid helpers — `computeDayStats`, `withAlpha`,
-`qualityCellStyle`, `dailyRoutineAllTimeStats`, `dailyRoutineStreak`. 67 assertions as of this
+`qualityCellStyle`, `dailyRoutineAllTimeStats`, `dailyRoutineStreak`. 68 assertions as of this
 writing (up from 48; `daily-routine.js`'s trailing `render()` call is harmless in this test
 context since it only reaches the camera-free landing screen). Camera/MediaPipe integration itself
 stays out of scope, matching `session-flow.html`'s own precedent of testing pure logic only — the

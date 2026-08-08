@@ -134,14 +134,19 @@ function visibilityAvg(lm, idxs) { return idxs.reduce((a, i) => a + lm[i].visibi
 // exercise-specific angle/form math. Debounced (multi-consecutive-frame) transitions over a
 // smoothed trajectory, so single-frame landmark jitter never flips the phase.
 // ═══════════════════════════════════════════════════════
-const DEBOUNCE_FRAMES = 4;
-const BOTTOM_DEBOUNCE_FRAMES = 3;
+// Time-based, not frame-count-based (see the real-device fix below): DEBOUNCE_MS/
+// BOTTOM_DEBOUNCE_MS are chosen to match the original frame-count thresholds (4 and 3 frames)
+// at the ~33ms/frame rate every synthetic test in this repo assumed, so nothing changes at that
+// rate — but a transition now fires once the condition has genuinely held for this many real
+// milliseconds, however many (or few) processed frames that took.
+const DEBOUNCE_MS = 130;         // was DEBOUNCE_FRAMES = 4, at 33ms/frame
+const BOTTOM_DEBOUNCE_MS = 100;  // was BOTTOM_DEBOUNCE_FRAMES = 3, at 33ms/frame
 const REP_ABANDON_MS = 8000;
 const MIN_REP_MS = 300;
 
 function newFsm() {
   return {
-    fsmState: 'standing', debounceCount: 0,
+    fsmState: 'standing', debounceStartMs: null,
     trackYHist: [], prevSmoothedY: null, topBaselineY: null,
     repBuf: [], repStartMs: 0,
   };
@@ -193,28 +198,34 @@ function tickFsm(fsm, lm, ts, trackFn, scaleFn, sampleFn) {
       fsm.topBaselineY += (smoothedY - fsm.topBaselineY) * 0.05;
     }
     if (smoothedY - fsm.topBaselineY > DESCEND_DELTA) {
-      if (++fsm.debounceCount >= DEBOUNCE_FRAMES) {
-        fsm.fsmState = 'descending'; fsm.debounceCount = 0; fsm.repBuf = []; fsm.repStartMs = ts;
+      if (fsm.debounceStartMs == null) fsm.debounceStartMs = ts;
+      if (ts - fsm.debounceStartMs >= DEBOUNCE_MS) {
+        fsm.fsmState = 'descending'; fsm.debounceStartMs = null; fsm.repBuf = []; fsm.repStartMs = ts;
       }
-    } else fsm.debounceCount = 0;
+    } else fsm.debounceStartMs = null;
   } else if (fsm.fsmState === 'descending') {
     pushSample('descending');
-    if (velocity <= 0) { if (++fsm.debounceCount >= BOTTOM_DEBOUNCE_FRAMES) { fsm.fsmState = 'bottom'; fsm.debounceCount = 0; } }
-    else fsm.debounceCount = 0;
-    if (ts - fsm.repStartMs > REP_ABANDON_MS) { fsm.fsmState = 'standing'; fsm.debounceCount = 0; fsm.repBuf = []; }
+    if (velocity <= 0) {
+      if (fsm.debounceStartMs == null) fsm.debounceStartMs = ts;
+      if (ts - fsm.debounceStartMs >= BOTTOM_DEBOUNCE_MS) { fsm.fsmState = 'bottom'; fsm.debounceStartMs = null; }
+    } else fsm.debounceStartMs = null;
+    if (ts - fsm.repStartMs > REP_ABANDON_MS) { fsm.fsmState = 'standing'; fsm.debounceStartMs = null; fsm.repBuf = []; }
   } else if (fsm.fsmState === 'bottom') {
     pushSample('bottom');
-    if (velocity < 0) { if (++fsm.debounceCount >= BOTTOM_DEBOUNCE_FRAMES) { fsm.fsmState = 'ascending'; fsm.debounceCount = 0; } }
-    else fsm.debounceCount = 0;
+    if (velocity < 0) {
+      if (fsm.debounceStartMs == null) fsm.debounceStartMs = ts;
+      if (ts - fsm.debounceStartMs >= BOTTOM_DEBOUNCE_MS) { fsm.fsmState = 'ascending'; fsm.debounceStartMs = null; }
+    } else fsm.debounceStartMs = null;
   } else if (fsm.fsmState === 'ascending') {
     pushSample('ascending');
     if (smoothedY - fsm.topBaselineY < RETURN_DELTA) {
-      if (++fsm.debounceCount >= DEBOUNCE_FRAMES) {
-        fsm.fsmState = 'standing'; fsm.debounceCount = 0;
+      if (fsm.debounceStartMs == null) fsm.debounceStartMs = ts;
+      if (ts - fsm.debounceStartMs >= DEBOUNCE_MS) {
+        fsm.fsmState = 'standing'; fsm.debounceStartMs = null;
         if (ts - fsm.repStartMs > MIN_REP_MS) completed = fsm.repBuf;
         fsm.repBuf = [];
       }
-    } else fsm.debounceCount = 0;
+    } else fsm.debounceStartMs = null;
   }
 
   return completed;
